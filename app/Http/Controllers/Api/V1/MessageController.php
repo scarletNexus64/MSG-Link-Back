@@ -83,6 +83,9 @@ class MessageController extends Controller
             ], 403);
         }
 
+        // Charger la relation sender pour éviter les requêtes N+1
+        $message->load('sender:id,first_name,last_name,username,avatar');
+
         // Marquer comme lu si destinataire
         if ($message->recipient_id === $user->id) {
             $message->markAsRead();

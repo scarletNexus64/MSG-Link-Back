@@ -101,8 +101,11 @@ class AnonymousMessage extends Model
         return [
             'id' => $this->sender->id,
             'username' => $this->sender->username,
+            'first_name' => $this->sender->first_name,
+            'last_name' => $this->sender->last_name,
             'full_name' => $this->sender->full_name,
             'avatar_url' => $this->sender->avatar_url,
+            'is_premium' => $this->sender->is_premium ?? false,
         ];
     }
 
