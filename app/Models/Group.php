@@ -17,9 +17,11 @@ class Group extends Model
     protected $fillable = [
         'name',
         'description',
+        'category_id',
         'creator_id',
         'invite_code',
         'is_public',
+        'is_discoverable',
         'max_members',
         'members_count',
         'messages_count',
@@ -29,6 +31,7 @@ class Group extends Model
 
     protected $casts = [
         'is_public' => 'boolean',
+        'is_discoverable' => 'boolean',
         'max_members' => 'integer',
         'members_count' => 'integer',
         'messages_count' => 'integer',
@@ -45,6 +48,14 @@ class Group extends Model
     const MAX_MEMBERS_PREMIUM = 200;
 
     // ==================== RELATIONS ====================
+
+    /**
+     * Catégorie du groupe
+     */
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(GroupCategory::class, 'category_id');
+    }
 
     /**
      * Créateur du groupe
@@ -125,6 +136,14 @@ class Group extends Model
             $q->where('name', 'like', "%{$search}%")
                 ->orWhere('description', 'like', "%{$search}%");
         });
+    }
+
+    /**
+     * Filtrer par catégorie
+     */
+    public function scopeByCategory($query, int $categoryId)
+    {
+        return $query->where('category_id', $categoryId);
     }
 
     // ==================== METHODS ====================

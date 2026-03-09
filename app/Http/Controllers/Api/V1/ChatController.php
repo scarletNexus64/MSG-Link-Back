@@ -42,7 +42,8 @@ class ChatController extends Controller
                 'participantTwo:id,first_name,last_name,username,avatar,last_seen_at',
                 'lastMessage',
             ])
-            ->withRecentActivity()
+            // Trier par last_message_at si présent, sinon par created_at
+            ->orderByRaw('COALESCE(last_message_at, created_at) DESC')
             ->paginate($request->get('per_page', 20));
 
         // Transformer pour ajouter des infos supplémentaires
@@ -184,14 +185,65 @@ class ChatController extends Controller
             ], 422);
         }
 
+        $validated = $request->validated();
+
+        // Valider qu'au moins content OU media est présent
+        if (empty($validated['content']) && !$request->hasFile('media')) {
+            return response()->json([
+                'message' => 'Vous devez fournir un contenu texte ou un média.',
+            ], 422);
+        }
+
+        // Déterminer le type de message
+        $messageType = $validated['type'] ?? ChatMessage::TYPE_TEXT;
+        $mediaUrl = null;
+
+        // Gestion du média (audio, image, video)
+        if ($request->hasFile('media')) {
+            $media = $request->file('media');
+
+            // Déterminer le dossier selon le type
+            $folder = match($messageType) {
+                ChatMessage::TYPE_AUDIO => 'chat/audio',
+                ChatMessage::TYPE_IMAGE => 'chat/images',
+                ChatMessage::TYPE_VIDEO => 'chat/videos',
+                default => 'chat',
+            };
+
+            // Stocker le fichier dans storage/app/public/chat/{type}/{userId}
+            $path = $media->store($folder . '/' . $user->id, 'public');
+            $mediaUrl = $path;
+        }
+
         // Créer le message
         $message = ChatMessage::create([
             'conversation_id' => $conversation->id,
             'sender_id' => $user->id,
-            'content' => $request->validated()['content'],
-            'type' => ChatMessage::TYPE_TEXT,
-            'anonymous_message_id' => $request->validated()['reply_to_id'] ?? null,
+            'content' => $validated['content'] ?? '',
+            'type' => $messageType,
+            'media_url' => $mediaUrl,
+            'voice_type' => $validated['voice_type'] ?? 'normal',
+            'anonymous_message_id' => $validated['reply_to_id'] ?? null,
         ]);
+
+        // Si c'est un message audio avec un effet vocal (et pas normal), traiter de manière synchrone
+        if ($messageType === ChatMessage::TYPE_AUDIO && ($validated['voice_type'] ?? 'normal') !== 'normal' && $mediaUrl) {
+            \Log::info('🎤 [CHAT] Processing voice effect synchronously', [
+                'message_id' => $message->id,
+                'voice_type' => $validated['voice_type'],
+            ]);
+
+            // Traiter de manière synchrone pour que l'URL mise à jour soit disponible immédiatement
+            \App\Jobs\ProcessVoiceEffect::dispatchSync(
+                $message->id,
+                $mediaUrl,
+                $validated['voice_type'],
+                ChatMessage::class
+            );
+
+            // Recharger le message pour obtenir le media_url mis à jour
+            $message->refresh();
+        }
 
         // Mettre à jour la conversation
         $conversation->updateAfterMessage();

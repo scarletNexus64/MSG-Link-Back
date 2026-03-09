@@ -32,6 +32,27 @@
                             <i class="fas fa-lock mr-1"></i>Privé
                         </span>
                     @endif
+                    @if(!$group->is_public)
+                        @if($group->is_discoverable)
+                            <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                                <i class="fas fa-eye mr-1"></i>Découvrable
+                            </span>
+                        @else
+                            <span class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
+                                <i class="fas fa-eye-slash mr-1"></i>Non découvrable
+                            </span>
+                        @endif
+                    @endif
+                    @if($group->category)
+                        <span class="px-3 py-1 rounded-full text-xs font-medium"
+                              style="background-color: {{ $group->category->color }}15; color: {{ $group->category->color }};">
+                            <i class="fas fa-tag mr-1"></i>{{ $group->category->name }}
+                        </span>
+                    @else
+                        <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                            <i class="fas fa-tag mr-1"></i>Sans catégorie
+                        </span>
+                    @endif
                     <span class="text-sm text-gray-500">
                         <i class="fas fa-calendar mr-1"></i>
                         Créé le {{ $group->created_at->format('d/m/Y à H:i') }}

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\ConfessionComment;
+use App\Models\ChatMessage;
 use App\Services\AudioProcessingService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -30,9 +31,10 @@ class ProcessVoiceEffect implements ShouldQueue
      * Create a new job instance.
      */
     public function __construct(
-        public int $commentId,
+        public int $modelId,
         public string $audioPath,
-        public string $voiceType
+        public string $voiceType,
+        public string $modelClass = \App\Models\ConfessionComment::class
     ) {}
 
     /**
@@ -42,7 +44,8 @@ class ProcessVoiceEffect implements ShouldQueue
     {
         try {
             Log::info('Starting voice effect processing', [
-                'comment_id' => $this->commentId,
+                'model_id' => $this->modelId,
+                'model_class' => $this->modelClass,
                 'voice_type' => $this->voiceType,
                 'audio_path' => $this->audioPath
             ]);
@@ -50,27 +53,30 @@ class ProcessVoiceEffect implements ShouldQueue
             // Appliquer l'effet vocal
             $processedPath = $audioService->applyVoiceEffect($this->audioPath, $this->voiceType);
 
-            // Mettre à jour le commentaire avec le nouveau chemin
-            $comment = ConfessionComment::find($this->commentId);
+            // Mettre à jour le modèle avec le nouveau chemin
+            $model = $this->modelClass::find($this->modelId);
 
-            if ($comment) {
-                $comment->update([
+            if ($model) {
+                $model->update([
                     'media_url' => $processedPath
                 ]);
 
                 Log::info('Voice effect processing completed', [
-                    'comment_id' => $this->commentId,
+                    'model_id' => $this->modelId,
+                    'model_class' => $this->modelClass,
                     'processed_path' => $processedPath
                 ]);
             } else {
-                Log::warning('Comment not found during voice processing', [
-                    'comment_id' => $this->commentId
+                Log::warning('Model not found during voice processing', [
+                    'model_id' => $this->modelId,
+                    'model_class' => $this->modelClass
                 ]);
             }
 
         } catch (\Exception $e) {
             Log::error('Voice effect processing failed', [
-                'comment_id' => $this->commentId,
+                'model_id' => $this->modelId,
+                'model_class' => $this->modelClass,
                 'voice_type' => $this->voiceType,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
@@ -87,7 +93,8 @@ class ProcessVoiceEffect implements ShouldQueue
     public function failed(\Throwable $exception): void
     {
         Log::error('Voice effect job failed permanently', [
-            'comment_id' => $this->commentId,
+            'model_id' => $this->modelId,
+            'model_class' => $this->modelClass,
             'voice_type' => $this->voiceType,
             'error' => $exception->getMessage()
         ]);

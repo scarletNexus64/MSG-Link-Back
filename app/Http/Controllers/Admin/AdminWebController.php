@@ -1354,7 +1354,7 @@ class AdminWebController extends Controller
 
     public function groups(Request $request)
     {
-        $query = Group::with(['creator', 'lastMessage']);
+        $query = Group::with(['creator', 'category', 'lastMessage']);
 
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
@@ -1389,6 +1389,7 @@ class AdminWebController extends Controller
     {
         $group->load([
             'creator',
+            'category',
             'activeMembers.user',
             'messages' => function ($query) {
                 $query->latest()->limit(50);

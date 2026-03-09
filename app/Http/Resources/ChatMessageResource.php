@@ -39,11 +39,13 @@ class ChatMessageResource extends JsonResource
             'conversation_id' => $this->conversation_id,
             'content' => $this->content,
             'type' => $this->type,
+            'media_url' => $this->media_url,
+            'metadata' => $this->metadata,
             'is_mine' => $isMine,
 
             // Expéditeur
             'sender' => $senderData,
-            
+
             // Si c'est un message cadeau
             'gift_data' => $this->when($this->type === 'gift' && $this->relationLoaded('giftTransaction'), function () {
                 $gift = $this->giftTransaction?->gift;

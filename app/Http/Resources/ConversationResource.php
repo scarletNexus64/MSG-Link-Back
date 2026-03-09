@@ -37,6 +37,9 @@ class ConversationResource extends JsonResource
         // Récupérer l'anonymous_message_id depuis le premier message de la conversation
         $anonymousMessageId = $this->messages()->orderBy('created_at')->value('anonymous_message_id');
 
+        // Une conversation est anonyme si elle a été créée depuis un message anonyme
+        $isAnonymous = $anonymousMessageId !== null || $this->pinned_anonymous_message_id !== null;
+
         // Vérifier si l'utilisateur actuel peut initier un paiement pour révéler l'identité
         // N'importe quel participant de la conversation peut payer pour révéler l'autre
         // Conditions:
@@ -80,6 +83,7 @@ class ConversationResource extends JsonResource
             ],
 
             // Status
+            'is_anonymous' => $isAnonymous, // La conversation a été créée depuis un message anonyme
             'identity_revealed' => $canViewIdentity,
             'has_premium' => $this->has_premium ?? false,
             'unread_count' => $this->unread_count ?? 0,

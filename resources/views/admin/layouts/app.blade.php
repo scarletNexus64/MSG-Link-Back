@@ -141,9 +141,15 @@
                     </a>
 
                     <a href="{{ route('admin.groups.index') }}"
-                       class="flex items-center px-4 py-3 text-sm rounded-lg transition-colors {{ request()->routeIs('admin.groups.*') ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+                       class="flex items-center px-4 py-3 text-sm rounded-lg transition-colors {{ request()->routeIs('admin.groups.index') || request()->routeIs('admin.groups.show') ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
                         <i class="fas fa-users-between-lines w-5 mr-3"></i>
                         Groupes
+                    </a>
+
+                    <a href="{{ route('admin.group-categories.index') }}"
+                       class="flex items-center px-4 py-3 text-sm rounded-lg transition-colors {{ request()->routeIs('admin.group-categories.*') ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+                        <i class="fas fa-tags w-5 mr-3"></i>
+                        Catégories Groupes
                     </a>
 
                     <a href="{{ route('admin.gifts.index') }}"

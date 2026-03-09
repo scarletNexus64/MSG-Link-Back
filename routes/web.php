@@ -165,6 +165,17 @@ Route::prefix('admin')->middleware('auth')->group(function () {
         Route::delete('/{group}', [AdminWebController::class, 'destroyGroup'])->name('admin.groups.destroy');
     });
 
+    // Group Categories Management
+    Route::resource('group-categories', \App\Http\Controllers\Admin\GroupCategoryController::class)
+        ->names([
+            'index' => 'admin.group-categories.index',
+            'create' => 'admin.group-categories.create',
+            'store' => 'admin.group-categories.store',
+            'edit' => 'admin.group-categories.edit',
+            'update' => 'admin.group-categories.update',
+            'destroy' => 'admin.group-categories.destroy',
+        ]);
+
     // Gifts
     Route::prefix('gifts')->group(function () {
         Route::get('/', [AdminWebController::class, 'gifts'])->name('admin.gifts.index');

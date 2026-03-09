@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             AdminSeeder::class,
             GiftSeeder::class,
+            GroupCategorySeeder::class,
         ]);
     }
 
@@ -26,7 +27,9 @@ class DatabaseSeeder extends Seeder
         $this->call([
             AdminSeeder::class,
             GiftSeeder::class,
+            GroupCategorySeeder::class,
             FakeDataSeeder::class,
+            AssignGroupCategoriesSeeder::class,
         ]);
     }
 }

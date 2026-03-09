@@ -17,6 +17,9 @@ class ChatMessage extends Model
         'sender_id',
         'content',
         'type',
+        'media_url',
+        'metadata',
+        'voice_type',
         'gift_transaction_id',
         'anonymous_message_id',
         'is_read',
@@ -26,6 +29,7 @@ class ChatMessage extends Model
     protected $casts = [
         'is_read' => 'boolean',
         'read_at' => 'datetime',
+        'metadata' => 'array',
     ];
 
     /**
@@ -37,6 +41,9 @@ class ChatMessage extends Model
      * Types de messages
      */
     const TYPE_TEXT = 'text';
+    const TYPE_IMAGE = 'image';
+    const TYPE_AUDIO = 'audio';
+    const TYPE_VIDEO = 'video';
     const TYPE_GIFT = 'gift';
     const TYPE_SYSTEM = 'system';
 
@@ -93,6 +100,24 @@ class ChatMessage extends Model
 
         // Forcer le déchiffrement pour les messages texte
         return $this->getDecryptedAttribute('content');
+    }
+
+    /**
+     * Accessor pour media_url (transformer en URL complète)
+     */
+    public function getMediaUrlAttribute($value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        // Si c'est déjà une URL complète, retourner tel quel
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+            return $value;
+        }
+
+        // Construire l'URL complète : domaine + /storage/ + chemin
+        return config('app.url') . '/storage/' . $value;
     }
 
     /**

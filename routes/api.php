@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\MessageController;
 use App\Http\Controllers\Api\V1\ConfessionController;
 use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\GroupController;
+use App\Http\Controllers\Api\V1\GroupCategoryController;
 use App\Http\Controllers\Api\V1\GiftController;
 use App\Http\Controllers\Api\V1\PremiumController;
 use App\Http\Controllers\Api\V1\WalletController;
@@ -60,6 +61,10 @@ Route::prefix('v1')->group(function () {
     Route::get('/gifts/{gift}', [GiftController::class, 'show'])->where('gift', '[0-9]+');
     Route::get('/gift-categories', [GiftController::class, 'getCategories']);
     Route::get('/gift-categories/{categoryId}/gifts', [GiftController::class, 'getGiftsByCategory']);
+
+    // ==================== PUBLIC GROUP CATEGORIES ====================
+    Route::get('/group-categories', [GroupCategoryController::class, 'index']);
+    Route::get('/group-categories/{category}', [GroupCategoryController::class, 'show']);
 
     // ==================== PREMIUM PRICING ====================
     Route::get('/premium/pricing', [PremiumController::class, 'pricing']);
@@ -137,6 +142,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/sent', [MessageController::class, 'sent']);
             Route::get('/stats', [MessageController::class, 'stats']);
             Route::post('/read-all', [MessageController::class, 'markAllAsRead']);
+            Route::post('/send/reply', [MessageController::class, 'sendReply']); // Route spécifique pour les réponses
             Route::get('/{message}', [MessageController::class, 'show']);
             Route::post('/send/{username}', [MessageController::class, 'send']);
             Route::post('/{message}/reveal', [MessageController::class, 'reveal']);

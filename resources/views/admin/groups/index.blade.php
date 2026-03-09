@@ -139,6 +139,7 @@
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Membres</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Messages</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Visibilité</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Créé le</th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -184,6 +185,18 @@
                             @else
                                 <span class="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
                                     <i class="fas fa-lock mr-1"></i>Privé
+                                </span>
+                            @endif
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            @if($group->category)
+                                <span class="px-2 py-1 rounded-full text-xs font-medium"
+                                      style="background-color: {{ $group->category->color }}15; color: {{ $group->category->color }};">
+                                    {{ $group->category->name }}
+                                </span>
+                            @else
+                                <span class="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                                    Sans catégorie
                                 </span>
                             @endif
                         </td>

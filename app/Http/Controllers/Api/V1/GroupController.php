@@ -25,7 +25,7 @@ class GroupController extends Controller
         $groups = Group::whereHas('activeMembers', function ($query) use ($user) {
             $query->where('user_id', $user->id);
         })
-            ->with(['lastMessage'])
+            ->with(['lastMessage', 'category'])
             ->orderByRaw('last_message_at IS NULL, last_message_at DESC')
             ->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 20));
@@ -57,7 +57,9 @@ class GroupController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:100',
             'description' => 'nullable|string|max:500',
+            'category_id' => 'nullable|exists:group_categories,id',
             'is_public' => 'boolean',
+            'is_discoverable' => 'boolean',
             'max_members' => 'nullable|integer|min:2|max:200',
         ]);
 
@@ -69,9 +71,11 @@ class GroupController extends Controller
             $group = Group::create([
                 'name' => $validated['name'],
                 'description' => $validated['description'] ?? null,
+                'category_id' => $validated['category_id'] ?? null,
                 'creator_id' => $user->id,
                 'invite_code' => Group::generateInviteCode(),
                 'is_public' => $validated['is_public'] ?? false,
+                'is_discoverable' => $validated['is_discoverable'] ?? true,
                 'max_members' => $validated['max_members'] ?? Group::MAX_MEMBERS_DEFAULT,
                 'members_count' => 1,
             ]);
@@ -144,7 +148,9 @@ class GroupController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|string|max:100',
             'description' => 'nullable|string|max:500',
+            'category_id' => 'nullable|exists:group_categories,id',
             'is_public' => 'sometimes|boolean',
+            'is_discoverable' => 'sometimes|boolean',
             'max_members' => 'sometimes|integer|min:2|max:200',
         ]);
 
@@ -181,12 +187,24 @@ class GroupController extends Controller
      */
     public function discover(Request $request): JsonResponse
     {
-        $query = Group::public()
-            ->with(['lastMessage']);
+        // Récupérer les groupes publics OU les groupes privés découvrables
+        $query = Group::where(function($q) {
+                $q->where('is_public', true)
+                  ->orWhere(function($subQuery) {
+                      $subQuery->where('is_public', false)
+                               ->where('is_discoverable', true);
+                  });
+            })
+            ->with(['lastMessage', 'category']);
 
         // Filtrage par recherche
         if ($request->has('search')) {
             $query->search($request->get('search'));
+        }
+
+        // Filtrage par catégorie
+        if ($request->has('category_id') && $request->get('category_id') !== null) {
+            $query->byCategory($request->get('category_id'));
         }
 
         // Tri
