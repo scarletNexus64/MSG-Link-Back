@@ -245,7 +245,7 @@ class GiftController extends Controller
 
                 // Diffuser le message dans la conversation via WebSocket
                 $chatMessage->load(['sender', 'giftTransaction.gift']);
-                event(new ChatMessageSent($chatMessage));
+                event(new ChatMessageSent($chatMessage, $recipient->id));
             } catch (\Exception $e) {
                 \Log::warning('Broadcasting failed for gift: ' . $e->getMessage());
             }
@@ -392,7 +392,7 @@ class GiftController extends Controller
 
                 // Diffuser le message dans la conversation via WebSocket
                 $chatMessage->load(['sender', 'giftTransaction.gift']);
-                event(new ChatMessageSent($chatMessage));
+                event(new ChatMessageSent($chatMessage, $recipient->id));
             } catch (\Exception $e) {
                 \Log::warning('Broadcasting failed for gift: ' . $e->getMessage());
             }

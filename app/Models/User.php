@@ -92,6 +92,14 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Alias pour full_name (pour compatibilité)
+     */
+    public function getNameAttribute(): string
+    {
+        return $this->full_name;
+    }
+
+    /**
      * Initiale de l'utilisateur (pour affichage anonyme)
      */
     public function getInitialAttribute(): string
@@ -516,12 +524,36 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function getOrCreateConversationWith(User $user): Conversation
     {
-        $conversation = $this->getConversationWith($user);
+        // Vérifier d'abord si une conversation existe (même soft deleted)
+        $conversation = Conversation::withTrashed()
+            ->between($this->id, $user->id)
+            ->first();
 
-        if (!$conversation) {
+        if ($conversation) {
+            // Si la conversation existe mais est soft deleted, la restaurer
+            if ($conversation->trashed()) {
+                $conversation->restore();
+                \Log::info('💬 Conversation restaurée (soft delete)', [
+                    'conversation_id' => $conversation->id,
+                    'participant_one_id' => $conversation->participant_one_id,
+                    'participant_two_id' => $conversation->participant_two_id,
+                ]);
+            }
+
+            // Révéler automatiquement la conversation pour l'utilisateur actuel s'il l'avait masquée
+            if ($conversation->isHiddenFor($this)) {
+                $conversation->revealFor($this);
+            }
+        } else {
+            // Créer une nouvelle conversation si elle n'existe pas du tout
             $conversation = Conversation::create([
                 'participant_one_id' => min($this->id, $user->id),
                 'participant_two_id' => max($this->id, $user->id),
+            ]);
+            \Log::info('💬 Nouvelle conversation créée', [
+                'conversation_id' => $conversation->id,
+                'participant_one_id' => $conversation->participant_one_id,
+                'participant_two_id' => $conversation->participant_two_id,
             ]);
         }
 

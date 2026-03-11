@@ -76,6 +76,11 @@ class ChatMessageResource extends JsonResource
 
             'is_read' => $this->is_read,
             'read_at' => $this->read_at?->toIso8601String(),
+
+            // Édition de message
+            'edited_at' => $this->edited_at?->toIso8601String(),
+            'is_edited' => $this->edited_at !== null,
+
             'created_at' => $this->created_at->toIso8601String(),
         ];
     }

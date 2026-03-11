@@ -27,13 +27,33 @@ Broadcast::channel('user.{userId}', function (User $user, int $userId) {
  * Canal privé pour une conversation
  */
 Broadcast::channel('conversation.{conversationId}', function (User $user, int $conversationId) {
+    \Log::info('🔐 Channel auth attempt', [
+        'user_id' => $user->id,
+        'user_name' => $user->username,
+        'conversation_id' => $conversationId
+    ]);
+
     $conversation = Conversation::find($conversationId);
-    
+
     if (!$conversation) {
+        \Log::warning('❌ Conversation not found', ['id' => $conversationId]);
         return false;
     }
-    
-    return $conversation->hasParticipant($user);
+
+    \Log::info('📋 Conversation found', [
+        'conversation_id' => $conversationId,
+        'participant_one_id' => $conversation->participant_one_id,
+        'participant_two_id' => $conversation->participant_two_id
+    ]);
+
+    $hasAccess = $conversation->hasParticipant($user);
+    \Log::info('✅ hasParticipant result', [
+        'conversation_id' => $conversationId,
+        'user_id' => $user->id,
+        'has_access' => $hasAccess
+    ]);
+
+    return $hasAccess;
 });
 
 /**

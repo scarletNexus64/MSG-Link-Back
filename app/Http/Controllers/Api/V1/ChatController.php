@@ -132,6 +132,7 @@ class ChatController extends Controller
 
     /**
      * Messages d'une conversation
+     * Ne montre que les messages après le timestamp de masquage si applicable
      */
     public function messages(Request $request, Conversation $conversation): JsonResponse
     {
@@ -143,13 +144,24 @@ class ChatController extends Controller
             ], 403);
         }
 
-        $messages = $conversation->messages()
+        // Obtenir le timestamp de masquage pour cet utilisateur
+        $hiddenAt = $conversation->getHiddenAtFor($user);
+
+        // Construire la requête des messages
+        $messagesQuery = $conversation->messages()
             ->with([
                 'sender:id,first_name,last_name,username,avatar',
                 'giftTransaction.gift',
                 'anonymousMessage:id,content,created_at',
-            ])
-            ->orderBy('created_at', 'desc')
+            ]);
+
+        // Si l'utilisateur a masqué la conversation, ne montrer que les messages après cette date
+        if ($hiddenAt) {
+            $messagesQuery->where('created_at', '>', $hiddenAt);
+        }
+
+        $messages = $messagesQuery
+            ->orderBy('created_at', 'asc')
             ->paginate($request->get('per_page', 50));
 
         return response()->json([
@@ -224,6 +236,7 @@ class ChatController extends Controller
             'media_url' => $mediaUrl,
             'voice_type' => $validated['voice_type'] ?? 'normal',
             'anonymous_message_id' => $validated['reply_to_id'] ?? null,
+            'metadata' => $validated['metadata'] ?? null,
         ]);
 
         // Si c'est un message audio avec un effet vocal (et pas normal), traiter de manière synchrone
@@ -248,6 +261,16 @@ class ChatController extends Controller
         // Mettre à jour la conversation
         $conversation->updateAfterMessage();
 
+        // Révéler automatiquement la conversation pour l'expéditeur s'il l'avait masquée
+        if ($conversation->isHiddenFor($user)) {
+            $conversation->revealFor($user);
+        }
+
+        // Révéler automatiquement la conversation pour le destinataire s'il l'avait masquée
+        if ($conversation->isHiddenFor($otherUser)) {
+            $conversation->revealFor($otherUser);
+        }
+
         // Charger les relations
         $message->load([
             'sender:id,first_name,last_name,username,avatar',
@@ -260,10 +283,14 @@ class ChatController extends Controller
                 'message_id' => $message->id,
                 'conversation_id' => $conversation->id,
                 'sender_id' => $user->id,
-                'channel' => 'conversation.' . $conversation->id,
+                'receiver_id' => $otherUser->id,
+                'channels' => [
+                    'conversation.' . $conversation->id,
+                    'user.' . $otherUser->id,
+                ],
             ]);
 
-            broadcast(new ChatMessageSent($message))->toOthers();
+            broadcast(new ChatMessageSent($message, $otherUser->id))->toOthers();
 
             \Log::info('✅ [CHAT] ChatMessageSent broadcasted successfully');
         } catch (\Exception $e) {
@@ -303,7 +330,7 @@ class ChatController extends Controller
     }
 
     /**
-     * Supprimer une conversation (pour l'utilisateur uniquement)
+     * Masquer une conversation (pour l'utilisateur uniquement)
      */
     public function destroy(Request $request, Conversation $conversation): JsonResponse
     {
@@ -315,9 +342,8 @@ class ChatController extends Controller
             ], 403);
         }
 
-        // Soft delete - on garde la conversation mais on la masque pour l'utilisateur
-        // Alternative: vraie suppression si les deux ont supprimé
-        $conversation->delete();
+        // Masquer la conversation pour cet utilisateur uniquement
+        $conversation->hideFor($user);
 
         return response()->json([
             'message' => 'Conversation supprimée.',
@@ -347,6 +373,26 @@ class ChatController extends Controller
                 'active' => $conversations->clone()->withStreak()->count(),
                 'max_streak' => $conversations->clone()->max('streak_count') ?? 0,
             ],
+        ]);
+    }
+
+    /**
+     * Obtenir le nombre total de messages non lus dans toutes les conversations
+     */
+    public function unreadCount(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        // Récupérer toutes les conversations de l'utilisateur
+        $conversations = Conversation::forUser($user->id)->get();
+
+        // Calculer le total des messages non lus
+        $totalUnreadCount = $conversations->sum(function ($conversation) use ($user) {
+            return $conversation->unreadCountFor($user);
+        });
+
+        return response()->json([
+            'total_unread_count' => $totalUnreadCount,
         ]);
     }
 
@@ -804,6 +850,147 @@ class ChatController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erreur lors de la vérification du paiement',
+            ], 500);
+        }
+    }
+
+    /**
+     * Éditer un message dans une conversation
+     */
+    public function updateMessage(Request $request, Conversation $conversation, ChatMessage $message): JsonResponse
+    {
+        $user = $request->user();
+
+        // Vérifier que l'utilisateur est participant de la conversation
+        if (!$conversation->hasParticipant($user)) {
+            return response()->json([
+                'message' => 'Accès non autorisé.',
+            ], 403);
+        }
+
+        // Vérifier que le message appartient à cette conversation
+        if ($message->conversation_id !== $conversation->id) {
+            return response()->json([
+                'message' => 'Ce message n\'appartient pas à cette conversation.',
+            ], 404);
+        }
+
+        // Vérifier que l'utilisateur est bien l'expéditeur du message
+        if ($message->sender_id !== $user->id) {
+            return response()->json([
+                'message' => 'Vous ne pouvez éditer que vos propres messages.',
+            ], 403);
+        }
+
+        // Vérifier que le message n'a pas plus de 15 minutes
+        $maxEditMinutes = 15;
+        if ($message->created_at->diffInMinutes(now()) > $maxEditMinutes) {
+            return response()->json([
+                'message' => "Vous ne pouvez éditer un message que dans les {$maxEditMinutes} minutes suivant son envoi.",
+            ], 422);
+        }
+
+        // Vérifier que ce n'est pas un message système ou cadeau
+        if (in_array($message->type, [ChatMessage::TYPE_SYSTEM, ChatMessage::TYPE_GIFT])) {
+            return response()->json([
+                'message' => 'Ce type de message ne peut pas être édité.',
+            ], 422);
+        }
+
+        // Valider le nouveau contenu
+        $validated = $request->validate([
+            'content' => 'required|string|max:5000',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            // Sauvegarder l'ancien contenu dans l'historique
+            $editHistory = $message->edit_history ? json_decode($message->edit_history, true) : [];
+            $editHistory[] = [
+                'content' => $message->content,
+                'edited_at' => now()->toIso8601String(),
+            ];
+
+            // Mettre à jour le message
+            $message->update([
+                'content' => $validated['content'],
+                'edited_at' => now(),
+                'edit_history' => json_encode($editHistory),
+            ]);
+
+            // Recharger le message avec ses relations
+            $message->load([
+                'sender:id,first_name,last_name,username,avatar',
+                'anonymousMessage:id,content,created_at'
+            ]);
+
+            DB::commit();
+
+            // Diffuser l'événement en temps réel
+            try {
+                \Log::info('📤 [CHAT] Broadcasting ChatMessageUpdated', [
+                    'message_id' => $message->id,
+                    'conversation_id' => $conversation->id,
+                    'sender_id' => $user->id,
+                ]);
+
+                broadcast(new \App\Events\ChatMessageUpdated($message))->toOthers();
+
+                \Log::info('✅ [CHAT] ChatMessageUpdated broadcasted successfully');
+            } catch (\Exception $e) {
+                \Log::error('❌ [CHAT] Broadcasting failed for message update: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'message' => new ChatMessageResource($message),
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('❌ [CHAT] Erreur lors de l\'édition du message: ' . $e->getMessage());
+
+            return response()->json([
+                'message' => 'Une erreur est survenue lors de l\'édition du message.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Mettre à jour le statut "en train d'écrire"
+     */
+    public function updateTypingStatus(Request $request, Conversation $conversation): JsonResponse
+    {
+        $user = $request->user();
+
+        // Vérifier que l'utilisateur est participant de la conversation
+        if (!$conversation->hasParticipant($user)) {
+            return response()->json([
+                'message' => 'Accès non autorisé.',
+            ], 403);
+        }
+
+        try {
+            \Log::info('📤 [CHAT] Broadcasting UserTyping', [
+                'conversation_id' => $conversation->id,
+                'user_id' => $user->id,
+                'username' => $user->username,
+            ]);
+
+            // Diffuser l'événement uniquement aux autres participants
+            broadcast(new \App\Events\UserTyping($conversation, $user))->toOthers();
+
+            \Log::info('✅ [CHAT] UserTyping broadcasted successfully');
+
+            return response()->json([
+                'status' => 'typing_broadcasted',
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('❌ [CHAT] Broadcasting failed for typing status: ' . $e->getMessage());
+
+            return response()->json([
+                'message' => 'Une erreur est survenue lors de la diffusion du statut.',
             ], 500);
         }
     }

@@ -24,11 +24,14 @@ class ChatMessage extends Model
         'anonymous_message_id',
         'is_read',
         'read_at',
+        'edited_at',
+        'edit_history',
     ];
 
     protected $casts = [
         'is_read' => 'boolean',
         'read_at' => 'datetime',
+        'edited_at' => 'datetime',
         'metadata' => 'array',
     ];
 

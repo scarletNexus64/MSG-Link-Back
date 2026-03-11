@@ -18,14 +18,9 @@
         @method('PUT')
 
         <!-- Tabs Navigation -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6" x-data="{ activeTab: 'payment' }">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6" x-data="{ activeTab: 'premium' }">
             <div class="border-b border-gray-200">
                 <nav class="flex -mb-px overflow-x-auto" aria-label="Tabs">
-                    <button type="button" @click="activeTab = 'payment'"
-                            :class="activeTab === 'payment' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                            class="whitespace-nowrap py-4 px-6 border-b-2 font-medium text-sm transition-colors">
-                        <i class="fas fa-credit-card mr-2"></i>Paiement
-                    </button>
                     <button type="button" @click="activeTab = 'premium'"
                             :class="activeTab === 'premium' ? 'border-yellow-500 text-yellow-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                             class="whitespace-nowrap py-4 px-6 border-b-2 font-medium text-sm transition-colors">
@@ -61,31 +56,6 @@
 
             <!-- Tab Panels -->
             <div class="p-6">
-                <!-- Payment Settings -->
-                <div x-show="activeTab === 'payment'" x-cloak>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        @foreach($paymentSettings as $setting)
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">
-                                {{ $setting->description }}
-                            </label>
-                            <input type="{{ $setting->type === 'integer' || $setting->type === 'decimal' ? 'number' : 'text' }}"
-                                   name="{{ $setting->key }}"
-                                   value="{{ old($setting->key, $setting->value) }}"
-                                   step="{{ $setting->type === 'decimal' ? '0.01' : '1' }}"
-                                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                                   placeholder="Entrez {{ strtolower($setting->description) }}">
-                        </div>
-                        @endforeach
-                    </div>
-                    <div class="mt-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
-                        <p class="text-sm text-blue-700">
-                            <i class="fas fa-info-circle mr-2"></i>
-                            Ces paramètres configurent l'intégration avec CinetPay pour les paiements mobiles.
-                        </p>
-                    </div>
-                </div>
-
                 <!-- Premium Settings -->
                 <div x-show="activeTab === 'premium'" x-cloak>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">

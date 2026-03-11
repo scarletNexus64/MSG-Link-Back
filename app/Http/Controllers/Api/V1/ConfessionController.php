@@ -28,7 +28,7 @@ class ConfessionController extends Controller
     {
         $confessions = Confession::publicApproved()
             ->with('author:id,first_name,last_name,username,avatar')
-            ->withCount(['likedBy', 'comments'])
+            ->withCount(['comments'])
             ->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 20));
 
@@ -325,6 +325,7 @@ class ConfessionController extends Controller
         return response()->json([
             'message' => $liked ? 'Confession likée.' : 'Vous avez déjà liké cette confession.',
             'likes_count' => $confession->fresh()->likes_count,
+            'is_liked' => true,
         ]);
     }
 
@@ -340,6 +341,7 @@ class ConfessionController extends Controller
         return response()->json([
             'message' => $unliked ? 'Like retiré.' : 'Vous n\'avez pas liké cette confession.',
             'likes_count' => $confession->fresh()->likes_count,
+            'is_liked' => false,
         ]);
     }
 
@@ -762,9 +764,10 @@ class ConfessionController extends Controller
         $confessions = Confession::whereHas('favoritedBy', function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             })
+            ->withTrashed() // Inclure les confessions supprimées
             ->publicApproved()
             ->with('author:id,first_name,last_name,username,avatar')
-            ->withCount(['likedBy', 'comments'])
+            ->withCount(['comments'])
             ->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 20));
 
@@ -772,6 +775,7 @@ class ConfessionController extends Controller
         $confessions->getCollection()->transform(function ($confession) use ($user) {
             $confession->is_liked = $confession->isLikedBy($user);
             $confession->is_favorited = true; // Toutes sont favorisées ici
+            $confession->is_deleted = $confession->trashed(); // Marquer si supprimée
             return $confession;
         });
 

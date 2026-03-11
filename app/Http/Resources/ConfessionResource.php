@@ -38,11 +38,14 @@ class ConfessionResource extends JsonResource
             ),
             
             // Stats pour confessions publiques
-            'likes_count' => $this->when($this->is_public, $this->liked_by_count ?? $this->likes_count ?? 0),
-            'views_count' => $this->when($this->is_public, $this->views_count ?? 0),
-            'comments_count' => $this->when($this->is_public, $this->comments_count ?? 0),
-            'is_liked' => $this->when(isset($this->is_liked), $this->is_liked),
-            
+            'likes_count' => $this->likes_count ?? 0,
+            'views_count' => $this->views_count ?? 0,
+            'comments_count' => $this->comments_count ?? 0,
+            'is_liked' => isset($this->is_liked) ? $this->is_liked : false,
+
+            // Statut de suppression (pour les favoris)
+            'is_deleted' => $this->when(isset($this->is_deleted), $this->is_deleted),
+
             // Modération (admin seulement)
             $this->mergeWhen($request->user()?->is_admin || $request->user()?->is_moderator, [
                 'moderated_by' => $this->whenLoaded('moderator', fn() => $this->moderator->username),

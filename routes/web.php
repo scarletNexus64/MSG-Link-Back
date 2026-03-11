@@ -42,6 +42,27 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     Route::get('/settings', [AdminWebController::class, 'settings'])->name('admin.settings');
     Route::put('/settings', [AdminWebController::class, 'updateSettings'])->name('admin.settings.update');
 
+    // Freemopay Settings
+    Route::get('/settings/freemopay', [\App\Http\Controllers\Admin\FreemopaySettingsController::class, 'index'])->name('admin.settings.freemopay');
+    Route::put('/settings/freemopay', [\App\Http\Controllers\Admin\FreemopaySettingsController::class, 'update'])->name('admin.settings.freemopay.update');
+    Route::post('/settings/freemopay/test', [\App\Http\Controllers\Admin\FreemopaySettingsController::class, 'test'])->name('admin.settings.freemopay.test');
+
+    // Wallets Management
+    Route::prefix('wallets')->name('admin.wallets.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Admin\WalletController::class, 'index'])->name('index');
+
+        // Routes fixes AVANT les routes avec paramètres
+        Route::get('transactions', [\App\Http\Controllers\Admin\WalletController::class, 'transactions'])->name('transactions');
+        Route::get('withdrawals', [\App\Http\Controllers\Admin\WalletController::class, 'withdrawals'])->name('withdrawals');
+
+        // Routes avec paramètres APRÈS
+        Route::post('withdrawals/{withdrawal}/approve', [\App\Http\Controllers\Admin\WalletController::class, 'approveWithdrawal'])->name('withdrawals.approve');
+        Route::post('withdrawals/{withdrawal}/reject', [\App\Http\Controllers\Admin\WalletController::class, 'rejectWithdrawal'])->name('withdrawals.reject');
+        Route::post('withdrawals/{withdrawal}/complete', [\App\Http\Controllers\Admin\WalletController::class, 'completeWithdrawal'])->name('withdrawals.complete');
+        Route::post('{user}/adjust', [\App\Http\Controllers\Admin\WalletController::class, 'adjustBalance'])->name('adjust');
+        Route::get('{user}', [\App\Http\Controllers\Admin\WalletController::class, 'show'])->name('show');
+    });
+
     // Profile
     Route::get('/profile', [AdminWebController::class, 'profile'])->name('admin.profile');
     Route::put('/profile', [AdminWebController::class, 'updateProfile'])->name('admin.profile.update');

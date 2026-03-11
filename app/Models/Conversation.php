@@ -22,11 +22,19 @@ class Conversation extends Model
         'streak_updated_at',
         'flame_level',
         'message_count',
+        'is_hidden_by_participant_one',
+        'hidden_by_participant_one_at',
+        'is_hidden_by_participant_two',
+        'hidden_by_participant_two_at',
     ];
 
     protected $casts = [
         'last_message_at' => 'datetime',
         'streak_updated_at' => 'datetime',
+        'hidden_by_participant_one_at' => 'datetime',
+        'hidden_by_participant_two_at' => 'datetime',
+        'is_hidden_by_participant_one' => 'boolean',
+        'is_hidden_by_participant_two' => 'boolean',
         'streak_count' => 'integer',
         'message_count' => 'integer',
     ];
@@ -148,12 +156,22 @@ class Conversation extends Model
     }
 
     /**
-     * Conversations d'un utilisateur
+     * Conversations d'un utilisateur (exclut celles masquées)
+     * Simple et performant avec index sur is_hidden
      */
     public function scopeForUser($query, int $userId)
     {
-        return $query->where('participant_one_id', $userId)
-            ->orWhere('participant_two_id', $userId);
+        return $query->where(function ($q) use ($userId) {
+            $q->where(function ($subQ) use ($userId) {
+                // Si l'utilisateur est participant_one et n'a pas masqué
+                $subQ->where('participant_one_id', $userId)
+                    ->where('is_hidden_by_participant_one', false);
+            })->orWhere(function ($subQ) use ($userId) {
+                // Si l'utilisateur est participant_two et n'a pas masqué
+                $subQ->where('participant_two_id', $userId)
+                    ->where('is_hidden_by_participant_two', false);
+            });
+        });
     }
 
     /**
@@ -322,27 +340,43 @@ class Conversation extends Model
 
     /**
      * Compter les messages non lus pour un utilisateur
+     * Ne compte que les messages après le timestamp de masquage si applicable
      */
     public function unreadCountFor(User $user): int
     {
-        return $this->messages()
+        $query = $this->messages()
             ->where('sender_id', '!=', $user->id)
-            ->where('is_read', false)
-            ->count();
+            ->where('is_read', false);
+
+        // Ne compter que les messages après le masquage
+        $hiddenAt = $this->getHiddenAtFor($user);
+        if ($hiddenAt) {
+            $query->where('created_at', '>', $hiddenAt);
+        }
+
+        return $query->count();
     }
 
     /**
      * Marquer tous les messages comme lus pour un utilisateur
+     * Ne marque que les messages après le timestamp de masquage si applicable
      */
     public function markAllAsReadFor(User $user): void
     {
-        $this->messages()
+        $query = $this->messages()
             ->where('sender_id', '!=', $user->id)
-            ->where('is_read', false)
-            ->update([
-                'is_read' => true,
-                'read_at' => now(),
-            ]);
+            ->where('is_read', false);
+
+        // Ne marquer que les messages après le masquage
+        $hiddenAt = $this->getHiddenAtFor($user);
+        if ($hiddenAt) {
+            $query->where('created_at', '>', $hiddenAt);
+        }
+
+        $query->update([
+            'is_read' => true,
+            'read_at' => now(),
+        ]);
     }
 
     /**
@@ -381,5 +415,89 @@ class Conversation extends Model
             ->exists();
 
         return $hasRevealedMessage;
+    }
+
+    /**
+     * Obtenir le timestamp de masquage pour un utilisateur
+     */
+    public function getHiddenAtFor(User $user): ?\Carbon\Carbon
+    {
+        if ($this->participant_one_id === $user->id) {
+            return $this->hidden_by_participant_one_at;
+        }
+
+        if ($this->participant_two_id === $user->id) {
+            return $this->hidden_by_participant_two_at;
+        }
+
+        return null;
+    }
+
+    /**
+     * Vérifier si la conversation est masquée pour un utilisateur
+     */
+    public function isHiddenFor(User $user): bool
+    {
+        if ($this->participant_one_id === $user->id) {
+            return $this->is_hidden_by_participant_one;
+        }
+
+        if ($this->participant_two_id === $user->id) {
+            return $this->is_hidden_by_participant_two;
+        }
+
+        return false;
+    }
+
+    /**
+     * Masquer la conversation pour un utilisateur
+     * Le timestamp sert de référence pour filtrer les anciens messages
+     */
+    public function hideFor(User $user): void
+    {
+        $now = now();
+
+        if ($this->participant_one_id === $user->id) {
+            $this->update([
+                'is_hidden_by_participant_one' => true,
+                'hidden_by_participant_one_at' => $now,
+            ]);
+        } elseif ($this->participant_two_id === $user->id) {
+            $this->update([
+                'is_hidden_by_participant_two' => true,
+                'hidden_by_participant_two_at' => $now,
+            ]);
+        }
+
+        \Log::info('💬 Conversation masquée', [
+            'conversation_id' => $this->id,
+            'user_id' => $user->id,
+            'hidden_at' => $now,
+        ]);
+    }
+
+    /**
+     * Révéler la conversation pour un utilisateur (quand il écrit/reçoit un nouveau message)
+     * Le timestamp de masquage reste pour filtrer les anciens messages
+     */
+    public function revealFor(User $user): void
+    {
+        if ($this->participant_one_id === $user->id && $this->is_hidden_by_participant_one) {
+            $this->update(['is_hidden_by_participant_one' => false]);
+
+            \Log::info('💬 Conversation révélée', [
+                'conversation_id' => $this->id,
+                'user_id' => $user->id,
+                'hidden_at_timestamp_kept' => $this->hidden_by_participant_one_at,
+            ]);
+        } elseif ($this->participant_two_id === $user->id && $this->is_hidden_by_participant_two) {
+            $this->update(['is_hidden_by_participant_two' => false]);
+
+            \Log::info('💬 Conversation révélée', [
+                'conversation_id' => $this->id,
+                'user_id' => $user->id,
+                'hidden_at_timestamp_kept' => $this->hidden_by_participant_two_at,
+            ]);
+        }
     }
 }

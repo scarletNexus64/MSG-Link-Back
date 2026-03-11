@@ -122,6 +122,12 @@
                         @endif
                     </a>
 
+                    <a href="{{ route('admin.wallets.index') }}"
+                       class="flex items-center px-4 py-3 text-sm rounded-lg transition-colors {{ request()->routeIs('admin.wallets.*') ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+                        <i class="fas fa-wallet w-5 mr-3"></i>
+                        Wallets
+                    </a>
+
                     <a href="{{ route('admin.confessions.index') }}"
                        class="flex items-center px-4 py-3 text-sm rounded-lg transition-colors {{ request()->routeIs('admin.confessions.*') ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
                         <i class="fas fa-heart w-5 mr-3"></i>

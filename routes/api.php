@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\StoryController;
 use App\Http\Controllers\Api\V1\CinetPayController;
+use App\Http\Controllers\Api\V1\FreemopayController;
 use App\Http\Controllers\Api\V1\SettingController;
 use App\Http\Controllers\Api\V1\PremiumPassController;
 use App\Http\Controllers\Api\V1\AnonymousMessageRevealController;
@@ -98,6 +99,9 @@ Route::prefix('v1')->group(function () {
         Route::match(['get', 'post'], '/notify', [CinetPayController::class, 'handleNotification']);
         Route::match(['get', 'post'], '/return', [CinetPayController::class, 'handleReturn']);
     });
+
+    // ==================== FREEMOPAY WEBHOOKS (Public) ====================
+    Route::post('/webhooks/freemopay', [FreemopayController::class, 'handleCallback']);
 
     // ==================== AUTHENTICATED ROUTES ====================
     Route::middleware('auth:sanctum')->group(function () {
@@ -188,10 +192,13 @@ Route::prefix('v1')->group(function () {
             Route::get('/conversations/{conversation}', [ChatController::class, 'show']);
             Route::get('/conversations/{conversation}/messages', [ChatController::class, 'messages']);
             Route::post('/conversations/{conversation}/messages', [ChatController::class, 'sendMessage']);
+            Route::patch('/conversations/{conversation}/messages/{message}', [ChatController::class, 'updateMessage']);
+            Route::post('/conversations/{conversation}/typing', [ChatController::class, 'updateTypingStatus']);
             Route::post('/conversations/{conversation}/read', [ChatController::class, 'markAsRead']);
             Route::post('/conversations/{conversation}/reveal', [ChatController::class, 'revealIdentity']);
             Route::post('/conversations/{conversation}/gift', [GiftController::class, 'sendInConversation']);
             Route::delete('/conversations/{conversation}', [ChatController::class, 'destroy']);
+            Route::get('/unread-count', [ChatController::class, 'unreadCount']);
             Route::get('/stats', [ChatController::class, 'stats']);
             Route::get('/user-status/{username}', [ChatController::class, 'userStatus']);
             Route::post('/presence', [ChatController::class, 'updatePresence']);
@@ -273,6 +280,14 @@ Route::prefix('v1')->group(function () {
             Route::post('/check-status', [CinetPayController::class, 'checkTransactionStatus']);
             Route::post('/withdrawal/initiate', [CinetPayController::class, 'initiateWithdrawal']);
             Route::post('/withdrawal/status', [CinetPayController::class, 'checkWithdrawalStatus']);
+        });
+
+        // ==================== FREEMOPAY (Authenticated) ====================
+        Route::prefix('freemopay')->group(function () {
+            Route::post('/deposit/initiate', [FreemopayController::class, 'initiateDepositPayment']);
+            Route::post('/check-status', [FreemopayController::class, 'checkTransactionStatus']);
+            Route::post('/withdrawal/initiate', [FreemopayController::class, 'initiateWithdrawal']);
+            Route::post('/withdrawal/status', [FreemopayController::class, 'checkWithdrawalStatus']);
         });
 
         // ==================== NOTIFICATIONS ====================

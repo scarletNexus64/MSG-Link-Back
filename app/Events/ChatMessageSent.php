@@ -16,15 +16,18 @@ class ChatMessageSent implements ShouldBroadcastNow
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public ChatMessage $message;
+    public int $receiverId;
 
-    public function __construct(ChatMessage $message)
+    public function __construct(ChatMessage $message, int $receiverId)
     {
         $this->message = $message;
+        $this->receiverId = $receiverId;
 
         \Log::info('🔊 [EVENT] ChatMessageSent créé', [
             'message_id' => $message->id,
             'conversation_id' => $message->conversation_id,
             'sender_id' => $message->sender_id,
+            'receiver_id' => $receiverId,
             'type' => $message->type,
         ]);
     }
@@ -32,7 +35,11 @@ class ChatMessageSent implements ShouldBroadcastNow
     public function broadcastOn(): array
     {
         return [
+            // Canal de la conversation spécifique (pour les utilisateurs dans la conversation)
             new PrivateChannel('conversation.' . $this->message->conversation_id),
+
+            // ✨ NOUVEAU: Canal global du destinataire (pour le badge count et notifications globales)
+            new PrivateChannel('user.' . $this->receiverId),
         ];
     }
 
