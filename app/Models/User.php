@@ -123,7 +123,12 @@ class User extends Authenticatable implements MustVerifyEmail
         if ($this->avatar) {
             return asset('storage/' . $this->avatar);
         }
-        return 'https://ui-avatars.com/api/?name=' . urlencode($this->full_name) . '&background=random';
+
+        // Générer une couleur déterministe basée sur l'username
+        $hash = md5($this->username ?? $this->email);
+        $color = substr($hash, 0, 6); // Utiliser les 6 premiers caractères comme couleur hex
+
+        return 'https://ui-avatars.com/api/?name=' . urlencode($this->full_name) . '&background=' . $color . '&color=fff';
     }
 
     /**

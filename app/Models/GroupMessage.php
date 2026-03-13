@@ -17,12 +17,15 @@ class GroupMessage extends Model
         'sender_id',
         'content',
         'type',
+        'media_url',
+        'metadata',
         'reply_to_message_id',
     ];
 
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'metadata' => 'array',
     ];
 
     protected $appends = [
@@ -39,6 +42,9 @@ class GroupMessage extends Model
      */
     const TYPE_TEXT = 'text';
     const TYPE_IMAGE = 'image';
+    const TYPE_AUDIO = 'audio';
+    const TYPE_VIDEO = 'video';
+    const TYPE_GIFT = 'gift';
     const TYPE_SYSTEM = 'system';
 
     // ==================== RELATIONS ====================
@@ -120,6 +126,18 @@ class GroupMessage extends Model
     {
         if ($this->type === self::TYPE_IMAGE) {
             return '📷 Image';
+        }
+
+        if ($this->type === self::TYPE_AUDIO) {
+            return '🎵 Audio';
+        }
+
+        if ($this->type === self::TYPE_VIDEO) {
+            return '🎥 Vidéo';
+        }
+
+        if ($this->type === self::TYPE_GIFT) {
+            return '🎁 Cadeau';
         }
 
         if ($this->type === self::TYPE_SYSTEM) {

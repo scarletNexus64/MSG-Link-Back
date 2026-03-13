@@ -218,12 +218,14 @@ Route::prefix('v1')->group(function () {
             Route::post('/', [GroupController::class, 'store']);
             Route::post('/join', [GroupController::class, 'join']);
             Route::get('/stats', [GroupController::class, 'stats']);
+            Route::get('/unread-count', [GroupController::class, 'unreadCount']);
             Route::get('/{group}', [GroupController::class, 'show']);
             Route::put('/{group}', [GroupController::class, 'update']);
             Route::delete('/{group}', [GroupController::class, 'destroy']);
             Route::post('/{group}/leave', [GroupController::class, 'leave']);
             Route::get('/{group}/messages', [GroupController::class, 'messages']);
             Route::post('/{group}/messages', [GroupController::class, 'sendMessage']);
+            Route::delete('/{group}/messages/{message}', [GroupController::class, 'deleteMessage']);
             Route::post('/{group}/read', [GroupController::class, 'markAsRead']);
             Route::get('/{group}/members', [GroupController::class, 'members']);
             Route::delete('/{group}/members/{member}', [GroupController::class, 'removeMember']);

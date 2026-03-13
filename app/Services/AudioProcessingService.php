@@ -117,13 +117,14 @@ class AudioProcessingService
     {
         return match($voiceType) {
             // Robot: Voix robotique avec vibrato et chorus pour effet métallique
-            'robot' => 'asetrate=44100*0.9,atempo=1.11,vibrato=f=10:d=0.5,chorus=0.5:0.9:50:0.4:0.25:2',
+            // asetrate ralentit de 10%, donc atempo doit compenser exactement
+            'robot' => 'asetrate=44100*0.9,aresample=44100,atempo=1.111111,vibrato=f=10:d=0.5,chorus=0.5:0.9:50:0.4:0.25:2',
             // Alien: Voix extraterrestre avec pitch descendant et écho
-            'alien' => 'asetrate=44100*0.8,atempo=1.25,aecho=0.5:0.7:20:0.5',
+            'alien' => 'asetrate=44100*0.8,aresample=44100,atempo=1.25,aecho=0.5:0.7:20:0.5',
             // Mystery: Voix grave et mystérieuse
-            'mystery' => 'asetrate=44100*0.75,atempo=1.33',
+            'mystery' => 'asetrate=44100*0.75,aresample=44100,atempo=1.333333',
             // Chipmunk: Voix aiguë comme un écureuil
-            'chipmunk' => 'asetrate=44100*1.5,atempo=0.67',
+            'chipmunk' => 'asetrate=44100*1.5,aresample=44100,atempo=0.666667',
             default => '',
         };
     }

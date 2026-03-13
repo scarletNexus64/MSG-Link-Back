@@ -21,8 +21,14 @@ class ConfessionResource extends JsonResource
 
             // Média (image ou vidéo)
             'media_type' => $this->media_type ?? 'none',
-            'media_url' => $this->when($this->media_url, fn() => url('storage/' . $this->media_url)),
-            'thumbnail_url' => $this->when($this->thumbnail_url, fn() => url('storage/' . $this->thumbnail_url)),
+            'media_url' => $this->when(
+                $this->media_url && !empty(trim($this->media_url)),
+                fn() => url('storage/' . $this->media_url)
+            ),
+            'thumbnail_url' => $this->when(
+                $this->thumbnail_url && !empty(trim($this->thumbnail_url)),
+                fn() => url('storage/' . $this->thumbnail_url)
+            ),
 
             // Auteur (masqué sauf si révélé)
             'author_initial' => $this->author_initial,

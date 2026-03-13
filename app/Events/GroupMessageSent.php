@@ -24,9 +24,30 @@ class GroupMessageSent implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [
+        $channels = [
+            // Canal du groupe spécifique (pour les utilisateurs dans la vue du groupe)
             new PrivateChannel('group.' . $this->message->group_id),
         ];
+
+        // Ajouter un canal pour chaque membre du groupe (pour les badges et notifications globales)
+        // On récupère les membres actifs du groupe sauf l'expéditeur
+        $members = $this->message->group->activeMembers()
+            ->where('user_id', '!=', $this->message->sender_id)
+            ->pluck('user_id');
+
+        foreach ($members as $userId) {
+            $channels[] = new PrivateChannel('user.' . $userId);
+        }
+
+        \Log::info('🔊 [EVENT] GroupMessageSent broadcasting', [
+            'message_id' => $this->message->id,
+            'group_id' => $this->message->group_id,
+            'sender_id' => $this->message->sender_id,
+            'members_notified' => $members->count(),
+            'channels_count' => count($channels),
+        ]);
+
+        return $channels;
     }
 
     public function broadcastAs(): string
@@ -43,6 +64,8 @@ class GroupMessageSent implements ShouldBroadcastNow
             'sender_anonymous_name' => $this->message->sender_anonymous_name,
             'content' => $this->message->content,
             'type' => $this->message->type,
+            'media_url' => $this->message->media_url,
+            'metadata' => $this->message->metadata,
             'reply_to_message_id' => $this->message->reply_to_message_id,
             'created_at' => $this->message->created_at->toIso8601String(),
         ];

@@ -8,6 +8,7 @@ use App\Models\GroupMember;
 use App\Models\GroupMessage;
 use App\Models\User;
 use App\Events\GroupMessageSent;
+use App\Services\AudioProcessingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -60,7 +61,7 @@ class GroupController extends Controller
             'category_id' => 'nullable|exists:group_categories,id',
             'is_public' => 'boolean',
             'is_discoverable' => 'boolean',
-            'max_members' => 'nullable|integer|min:2|max:200',
+            'max_members' => 'nullable|integer|min:2',
         ]);
 
         $user = $request->user();
@@ -151,7 +152,7 @@ class GroupController extends Controller
             'category_id' => 'nullable|exists:group_categories,id',
             'is_public' => 'sometimes|boolean',
             'is_discoverable' => 'sometimes|boolean',
-            'max_members' => 'sometimes|integer|min:2|max:200',
+            'max_members' => 'sometimes|integer|min:2',
         ]);
 
         $group->update($validated);
@@ -335,6 +336,7 @@ class GroupController extends Controller
 
     /**
      * Liste des messages d'un groupe
+     * Support de la pagination avec before pour charger les anciens messages
      */
     public function messages(Request $request, Group $group): JsonResponse
     {
@@ -347,17 +349,39 @@ class GroupController extends Controller
         }
 
         $canSeeIdentity = $user->is_premium ?? false;
+        $perPage = $request->get('per_page', 10); // Par défaut 10 messages
+        $before = $request->get('before'); // Timestamp ou message_id pour charger les anciens
 
-        // Charger la relation sender si premium
-        $query = $group->messages()->orderBy('created_at', 'desc');
+        // Construire la requête de base
+        $query = $group->messages();
+
         if ($canSeeIdentity) {
             $query->with('sender');
         }
 
-        $messages = $query->paginate($request->get('per_page', 50));
+        // Si 'before' est fourni, charger les messages avant ce timestamp/id
+        if ($before) {
+            // Vérifier si c'est un ID ou un timestamp
+            if (is_numeric($before) && $before < 1000000000000) {
+                // C'est un message_id
+                $query->where('id', '<', $before);
+            } else {
+                // C'est un timestamp
+                $query->where('created_at', '<', $before);
+            }
+        }
+
+        // Toujours trier par DESC pour avoir les plus récents en premier
+        $query->orderBy('created_at', 'desc')->orderBy('id', 'desc');
+
+        // Limiter les résultats
+        $messages = $query->limit($perPage)->get();
+
+        // Inverser pour avoir l'ordre chronologique (ancien → récent) pour l'affichage
+        $messages = $messages->reverse()->values();
 
         // Ajouter l'info si c'est le message de l'utilisateur et les données du sender
-        $messages->getCollection()->transform(function ($message) use ($user, $canSeeIdentity) {
+        $messages->transform(function ($message) use ($user, $canSeeIdentity) {
             $message->is_own = $message->sender_id === $user->id;
 
             // Ajouter les données du sender selon le statut premium
@@ -375,13 +399,22 @@ class GroupController extends Controller
             return $message;
         });
 
+        // Déterminer s'il y a plus de messages à charger
+        $hasMore = false;
+        if ($messages->count() > 0) {
+            $oldestMessageId = $messages->first()->id;
+            $hasMore = $group->messages()
+                ->where('id', '<', $oldestMessageId)
+                ->exists();
+        }
+
         return response()->json([
-            'messages' => $messages->items(),
+            'messages' => $messages,
             'meta' => [
-                'current_page' => $messages->currentPage(),
-                'last_page' => $messages->lastPage(),
-                'per_page' => $messages->perPage(),
-                'total' => $messages->total(),
+                'count' => $messages->count(),
+                'has_more' => $hasMore,
+                'oldest_message_id' => $messages->count() > 0 ? $messages->first()->id : null,
+                'oldest_message_timestamp' => $messages->count() > 0 ? $messages->first()->created_at->toIso8601String() : null,
             ],
         ]);
     }
@@ -400,18 +433,172 @@ class GroupController extends Controller
         }
 
         $validated = $request->validate([
-            'content' => 'required|string|max:5000',
+            'content' => 'nullable|string|max:5000',
+            'type' => 'nullable|string|in:text,image,audio,video,gift',
+            'media' => 'nullable|file|mimes:jpg,jpeg,png,gif,mp3,wav,aac,m4a,mp4,mov|max:10240',
+            'voice_type' => 'nullable|string|in:normal,robot,alien,mystery,chipmunk',
             'reply_to_message_id' => 'nullable|exists:group_messages,id',
+            'metadata' => 'nullable|json',
         ]);
 
-        // Créer le message
-        $message = GroupMessage::create([
-            'group_id' => $group->id,
-            'sender_id' => $user->id,
-            'content' => $validated['content'],
-            'type' => GroupMessage::TYPE_TEXT,
-            'reply_to_message_id' => $validated['reply_to_message_id'] ?? null,
-        ]);
+        $type = $validated['type'] ?? GroupMessage::TYPE_TEXT;
+        $mediaUrl = null;
+        $metadata = null;
+
+        // Upload du fichier média si présent
+        if ($request->hasFile('media')) {
+            $file = $request->file('media');
+
+            // Si c'est un audio avec voice_type, appliquer le traitement vocal
+            if ($type === 'audio' && isset($validated['voice_type'])) {
+                $voiceType = $validated['voice_type'];
+
+                // Stocker le fichier
+                $path = $file->store('group_messages', 'public');
+
+                try {
+                    // Utiliser le service AudioProcessingService pour appliquer l'effet
+                    $audioService = app(AudioProcessingService::class);
+                    $processedPath = $audioService->applyVoiceEffect($path, $voiceType);
+                    $mediaUrl = asset('storage/' . $processedPath);
+                } catch (\Exception $e) {
+                    \Log::warning('Voice effect processing failed, using original audio: ' . $e->getMessage());
+                    // Fallback: utiliser le fichier original
+                    $mediaUrl = asset('storage/' . $path);
+                }
+            } else {
+                // Pas d'audio ou pas de voice_type: stockage normal
+                $path = $file->store('group_messages', 'public');
+                $mediaUrl = asset('storage/' . $path);
+            }
+        }
+
+        // Parser les metadata si présent
+        if (isset($validated['metadata'])) {
+            $metadata = json_decode($validated['metadata'], true);
+        }
+
+        // ==================== GESTION DES CADEAUX EN REPLY ====================
+        // Si c'est un cadeau, vérifier le solde AVANT de créer le message
+        if ($metadata && isset($metadata['gift']) && $metadata['gift'] === true && isset($validated['reply_to_message_id'])) {
+            // Vérifier que l'envoyeur a assez de solde
+            $giftPrice = $metadata['price'] ?? 0;
+            if ($user->wallet_balance < $giftPrice) {
+                return response()->json([
+                    'message' => 'Solde insuffisant pour envoyer ce cadeau.',
+                    'required' => $giftPrice,
+                    'current_balance' => $user->wallet_balance,
+                ], 402); // 402 Payment Required
+            }
+        }
+
+        // Utiliser une transaction DB pour garantir la cohérence
+        try {
+            $message = \DB::transaction(function () use ($group, $user, $validated, $type, $mediaUrl, $metadata) {
+                // Créer le message
+                $message = GroupMessage::create([
+                    'group_id' => $group->id,
+                    'sender_id' => $user->id,
+                    'content' => $validated['content'] ?? null,
+                    'type' => $type,
+                    'media_url' => $mediaUrl,
+                    'metadata' => $metadata,
+                    'reply_to_message_id' => $validated['reply_to_message_id'] ?? null,
+                ]);
+
+                // Si c'est un cadeau et qu'il y a un reply, gérer la transaction complète
+                if ($metadata && isset($metadata['gift']) && $metadata['gift'] === true && $message->reply_to_message_id) {
+                    // Récupérer le message original pour identifier le destinataire
+                    $originalMessage = GroupMessage::find($message->reply_to_message_id);
+
+                    if ($originalMessage && $originalMessage->sender_id) {
+                        $recipient = User::find($originalMessage->sender_id);
+
+                        if ($recipient) {
+                            // Récupérer le cadeau depuis la metadata
+                            $giftPrice = $metadata['price'] ?? 0;
+                            $giftName = $metadata['name'] ?? 'Cadeau';
+                            $giftIcon = $metadata['icon'] ?? '🎁';
+
+                        // Calculer les montants
+                        $amounts = \App\Models\GiftTransaction::calculateAmounts($giftPrice);
+
+                        // DÉBITER l'envoyeur
+                        $senderBalanceBefore = $user->wallet_balance;
+                        $user->decrement('wallet_balance', $giftPrice);
+                        $user->refresh();
+
+                        // Créer une transaction de cadeau
+                        $giftTransaction = \App\Models\GiftTransaction::create([
+                            'gift_id' => null, // Pas de gift_id pour les cadeaux de groupe (custom)
+                            'sender_id' => $user->id,
+                            'recipient_id' => $recipient->id,
+                            'conversation_id' => null,
+                            'anonymous_message_id' => null,
+                            'amount' => $amounts['amount'],
+                            'platform_fee' => $amounts['platform_fee'],
+                            'net_amount' => $amounts['net_amount'],
+                            'status' => \App\Models\GiftTransaction::STATUS_COMPLETED,
+                            'message' => "Cadeau de groupe: {$giftName}",
+                            'is_anonymous' => false,
+                        ]);
+
+                        // Transaction de DÉBIT pour l'envoyeur
+                        \App\Models\WalletTransaction::create([
+                            'user_id' => $user->id,
+                            'type' => \App\Models\WalletTransaction::TYPE_DEBIT,
+                            'amount' => $giftPrice,
+                            'balance_before' => $senderBalanceBefore,
+                            'balance_after' => $user->wallet_balance,
+                            'description' => "Cadeau envoyé dans un groupe: {$giftIcon} {$giftName} à {$recipient->username}",
+                            'reference' => "GROUP_GIFT_SENT_{$message->id}",
+                            'transactionable_type' => \App\Models\GiftTransaction::class,
+                            'transactionable_id' => $giftTransaction->id,
+                        ]);
+
+                        // CRÉDITER le destinataire
+                        $recipientBalanceBefore = $recipient->wallet_balance;
+                        $recipient->increment('wallet_balance', $amounts['net_amount']);
+                        $recipient->refresh();
+
+                        // Transaction de CRÉDIT pour le destinataire
+                        \App\Models\WalletTransaction::create([
+                            'user_id' => $recipient->id,
+                            'type' => \App\Models\WalletTransaction::TYPE_CREDIT,
+                            'amount' => $amounts['net_amount'],
+                            'balance_before' => $recipientBalanceBefore,
+                            'balance_after' => $recipient->wallet_balance,
+                            'description' => "Cadeau reçu dans un groupe: {$giftIcon} {$giftName} de {$user->username}",
+                            'reference' => "GROUP_GIFT_RECEIVED_{$message->id}",
+                            'transactionable_type' => \App\Models\GiftTransaction::class,
+                            'transactionable_id' => $giftTransaction->id,
+                        ]);
+
+                            \Log::info('🎁 [GROUP GIFT] Transaction completed', [
+                                'sender_id' => $user->id,
+                                'sender_balance' => $user->wallet_balance,
+                                'recipient_id' => $recipient->id,
+                                'recipient_balance' => $recipient->wallet_balance,
+                                'amount_sent' => $giftPrice,
+                                'amount_received' => $amounts['net_amount'],
+                                'platform_fee' => $amounts['platform_fee'],
+                                'gift' => $giftName,
+                                'group_id' => $group->id,
+                            ]);
+                        }
+                    }
+                }
+
+                return $message;
+            });
+        } catch (\Exception $e) {
+            // Log l'erreur et retourner une erreur au client (la transaction DB sera automatiquement rollback)
+            \Log::error('🎁 [GROUP GIFT] Failed to process gift transaction: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Erreur lors du traitement du cadeau.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
 
         // Mettre à jour le groupe
         $group->updateAfterMessage();
@@ -442,6 +629,57 @@ class GroupController extends Controller
         return response()->json([
             'message' => $message,
         ], 201);
+    }
+
+    /**
+     * Supprimer un message de groupe
+     */
+    public function deleteMessage(Request $request, Group $group, GroupMessage $message): JsonResponse
+    {
+        $user = $request->user();
+
+        // Vérifier que l'utilisateur est membre du groupe
+        if (!$group->hasMember($user)) {
+            return response()->json([
+                'message' => 'Accès non autorisé.',
+            ], 403);
+        }
+
+        // Vérifier que le message appartient bien à ce groupe
+        if ($message->group_id !== $group->id) {
+            return response()->json([
+                'message' => 'Ce message n\'appartient pas à ce groupe.',
+            ], 403);
+        }
+
+        // Seul l'expéditeur peut supprimer son propre message
+        if ($message->sender_id !== $user->id) {
+            return response()->json([
+                'message' => 'Vous ne pouvez supprimer que vos propres messages.',
+            ], 403);
+        }
+
+        // Les messages système ne peuvent pas être supprimés
+        if ($message->type === GroupMessage::TYPE_SYSTEM) {
+            return response()->json([
+                'message' => 'Les messages système ne peuvent pas être supprimés.',
+            ], 403);
+        }
+
+        // Soft delete du message
+        $messageId = $message->id;
+        $message->delete();
+
+        // Broadcast l'événement de suppression via WebSocket
+        try {
+            broadcast(new \App\Events\GroupMessageDeleted($group->id, $messageId))->toOthers();
+        } catch (\Exception $e) {
+            \Log::warning('Broadcasting failed for message deletion: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Message supprimé avec succès.',
+        ]);
     }
 
     /**
@@ -635,6 +873,28 @@ class GroupController extends Controller
                 ->where('last_message_at', '>=', now()->subDays(7))
                 ->count(),
             'total_messages_sent' => GroupMessage::where('sender_id', $user->id)->count(),
+        ]);
+    }
+
+    /**
+     * Obtenir le nombre total de messages non lus dans tous les groupes
+     */
+    public function unreadCount(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        // Récupérer tous les groupes de l'utilisateur
+        $groups = Group::whereHas('activeMembers', function ($query) use ($user) {
+            $query->where('user_id', $user->id);
+        })->get();
+
+        // Calculer le total des messages non lus
+        $totalUnreadCount = $groups->sum(function ($group) use ($user) {
+            return $group->unreadCountFor($user);
+        });
+
+        return response()->json([
+            'total_unread_count' => $totalUnreadCount,
         ]);
     }
 }
