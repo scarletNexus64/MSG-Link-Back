@@ -59,10 +59,10 @@ class AudioProcessingService
 
             // Exécuter la commande FFmpeg directement
             $command = sprintf(
-                '%s -i %s -af "%s" -c:a aac -b:a 128k -y %s 2>&1',
+                '%s -i %s -af %s -c:a aac -b:a 128k -y %s 2>&1',
                 env('FFMPEG_BINARY', '/usr/bin/ffmpeg'),
                 escapeshellarg($fullInputPath),
-                $audioFilters,
+                escapeshellarg($audioFilters),
                 escapeshellarg($fullOutputPath)
             );
 

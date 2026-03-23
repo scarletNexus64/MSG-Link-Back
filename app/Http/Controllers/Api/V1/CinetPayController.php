@@ -26,7 +26,7 @@ class CinetPayController extends Controller
         $this->siteId = Setting::get('cinetpay_site_id', config('cinetpay.site_id'));
         $this->secretKey = Setting::get('cinetpay_secret_key', config('cinetpay.secret_key'));
         $this->notifyUrl = Setting::get('cinetpay_notify_url', config('cinetpay.notify_url'));
-        $this->returnUrl = config('app.frontend_url', 'http://192.168.1.149:3000') . '/payment/callback';
+        $this->returnUrl = config('app.frontend_url', 'http://10.74.254.28:3000') . '/payment/callback';
     }
 
     /**
