@@ -241,6 +241,8 @@ Route::prefix('v1')->group(function () {
             Route::delete('/{group}/members/{member}', [GroupController::class, 'removeMember']);
             Route::put('/{group}/members/{member}/role', [GroupController::class, 'updateMemberRole']);
             Route::post('/{group}/regenerate-invite', [GroupController::class, 'regenerateInviteCode']);
+            Route::post('/{group}/leave', [GroupController::class, 'leave']);
+            Route::post('/{group}/report', [GroupController::class, 'report']);
         });
 
         // ==================== CADEAUX ====================

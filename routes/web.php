@@ -204,6 +204,14 @@ Route::prefix('admin')->middleware('auth')->group(function () {
             'destroy' => 'admin.group-categories.destroy',
         ]);
 
+    // Group Reports Management
+    Route::prefix('group-reports')->name('admin.group-reports.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Admin\GroupReportController::class, 'index'])->name('index');
+        Route::get('/{report}', [\App\Http\Controllers\Admin\GroupReportController::class, 'show'])->name('show');
+        Route::put('/{report}/status', [\App\Http\Controllers\Admin\GroupReportController::class, 'updateStatus'])->name('update-status');
+        Route::post('/{report}/close-group', [\App\Http\Controllers\Admin\GroupReportController::class, 'closeGroup'])->name('close-group');
+    });
+
     // Gifts
     Route::prefix('gifts')->group(function () {
         Route::get('/', [AdminWebController::class, 'gifts'])->name('admin.gifts.index');

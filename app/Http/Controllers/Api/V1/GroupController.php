@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Group;
 use App\Models\GroupMember;
 use App\Models\GroupMessage;
+use App\Models\GroupReport;
 use App\Models\User;
 use App\Events\GroupMessageSent;
 use App\Services\AudioProcessingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class GroupController extends Controller
@@ -62,12 +64,21 @@ class GroupController extends Controller
             'is_public' => 'boolean',
             'is_discoverable' => 'boolean',
             'max_members' => 'nullable|integer|min:2',
+            'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120', // 5MB max
         ]);
 
         $user = $request->user();
 
         DB::beginTransaction();
         try {
+            // Gérer l'upload de l'avatar si présent
+            $avatarUrl = null;
+            if ($request->hasFile('avatar')) {
+                $avatarFile = $request->file('avatar');
+                $avatarPath = $avatarFile->store('groups/avatars', 'public');
+                $avatarUrl = asset('storage/' . $avatarPath);
+            }
+
             // Créer le groupe
             $group = Group::create([
                 'name' => $validated['name'],
@@ -79,6 +90,7 @@ class GroupController extends Controller
                 'is_discoverable' => $validated['is_discoverable'] ?? true,
                 'max_members' => $validated['max_members'] ?? Group::MAX_MEMBERS_DEFAULT,
                 'members_count' => 1,
+                'avatar_url' => $avatarUrl,
             ]);
 
             // Ajouter le créateur comme admin
@@ -92,6 +104,14 @@ class GroupController extends Controller
             GroupMessage::createSystemMessage($group, "Groupe créé par Anonyme");
 
             DB::commit();
+
+            // Ajouter les flags is_creator et is_admin
+            $group->is_creator = true; // Le créateur vient de créer le groupe
+            $group->is_admin = true;   // Le créateur est aussi admin
+            $group->unread_count = 0;  // Pas de messages non lus au départ
+
+            // Recharger le groupe pour avoir tous les champs
+            $group->refresh();
 
             return response()->json([
                 'message' => 'Groupe créé avec succès.',
@@ -153,13 +173,49 @@ class GroupController extends Controller
             'is_public' => 'sometimes|boolean',
             'is_discoverable' => 'sometimes|boolean',
             'max_members' => 'sometimes|integer|min:2',
+            'avatar' => 'nullable|image|mimes:jpg,jpeg,png,gif|max:5120', // Max 5MB
         ]);
+
+        // Vérifier si l'utilisateur essaie de renommer le groupe
+        // Seul le créateur peut renommer le groupe
+        if (isset($validated['name']) && !$group->isCreator($user)) {
+            return response()->json([
+                'message' => 'Seul le créateur peut renommer le groupe.',
+            ], 403);
+        }
+
+        // Gérer l'upload de l'avatar si fourni
+        if ($request->hasFile('avatar')) {
+            // Supprimer l'ancien avatar s'il existe
+            if ($group->avatar_url) {
+                // Extraire le chemin du storage depuis l'URL complète ou relative
+                $oldPath = str_replace([asset('storage/'), '/storage/'], '', $group->avatar_url);
+                Storage::disk('public')->delete($oldPath);
+            }
+
+            // Enregistrer le nouvel avatar (même dossier que lors de la création)
+            $avatarFile = $request->file('avatar');
+            $avatarPath = $avatarFile->store('groups/avatars', 'public');
+            $validated['avatar_url'] = asset('storage/' . $avatarPath);
+        }
 
         $group->update($validated);
 
+        // Recharger le groupe avec toutes les relations et attributs calculés
+        $group->refresh();
+        $group->load([
+            'category',
+            'lastMessage',
+        ]);
+
+        // Ajouter les attributs calculés pour l'utilisateur connecté
+        $group->unread_count = $group->unreadCountFor($user);
+        $group->is_creator = $group->isCreator($user);
+        $group->is_admin = $group->isAdmin($user);
+
         return response()->json([
             'message' => 'Groupe mis à jour avec succès.',
-            'group' => $group->fresh(),
+            'group' => $group,
         ]);
     }
 
@@ -300,38 +356,13 @@ class GroupController extends Controller
         $group->unread_count = $group->unreadCountFor($user);
         $group->is_creator = $group->isCreator($user);
         $group->is_admin = $group->isAdmin($user);
+        $group->is_member = true; // L'utilisateur vient de rejoindre le groupe
+        $group->can_join = false; // L'utilisateur est déjà membre, il ne peut plus rejoindre
 
         return response()->json([
             'message' => 'Vous avez rejoint le groupe avec succès.',
             'group' => $group,
         ], 201);
-    }
-
-    /**
-     * Quitter un groupe
-     */
-    public function leave(Request $request, Group $group): JsonResponse
-    {
-        $user = $request->user();
-
-        if (!$group->hasMember($user)) {
-            return response()->json([
-                'message' => 'Vous n\'êtes pas membre de ce groupe.',
-            ], 422);
-        }
-
-        // Le créateur ne peut pas quitter son groupe
-        if ($group->isCreator($user)) {
-            return response()->json([
-                'message' => 'Le créateur ne peut pas quitter le groupe. Supprimez-le ou transférez la propriété.',
-            ], 422);
-        }
-
-        $group->removeMember($user);
-
-        return response()->json([
-            'message' => 'Vous avez quitté le groupe.',
-        ]);
     }
 
     /**
@@ -776,16 +807,16 @@ class GroupController extends Controller
     }
 
     /**
-     * Retirer un membre du groupe (admin/créateur uniquement)
+     * Retirer un membre du groupe (créateur uniquement)
      */
     public function removeMember(Request $request, Group $group, GroupMember $member): JsonResponse
     {
         $user = $request->user();
 
-        // Vérifier les permissions
-        if (!$group->isCreator($user) && !$group->isAdmin($user)) {
+        // Vérifier les permissions - Seul le créateur peut retirer un membre
+        if (!$group->isCreator($user)) {
             return response()->json([
-                'message' => 'Accès non autorisé.',
+                'message' => 'Seul le créateur peut retirer des membres.',
             ], 403);
         }
 
@@ -843,6 +874,49 @@ class GroupController extends Controller
         return response()->json([
             'message' => 'Rôle mis à jour avec succès.',
             'member' => $member->fresh(),
+        ]);
+    }
+
+    /**
+     * Quitter un groupe (membres uniquement, pas le créateur)
+     */
+    public function leave(Request $request, Group $group): JsonResponse
+    {
+        $user = $request->user();
+
+        // Vérifier que l'utilisateur est membre
+        if (!$group->hasMember($user)) {
+            return response()->json([
+                'message' => 'Vous n\'êtes pas membre de ce groupe.',
+            ], 403);
+        }
+
+        // Le créateur ne peut pas quitter son propre groupe
+        if ($group->isCreator($user)) {
+            return response()->json([
+                'message' => 'Le créateur ne peut pas quitter son propre groupe. Vous devez le supprimer.',
+            ], 422);
+        }
+
+        // Récupérer le membre
+        $member = $group->members()->where('user_id', $user->id)->first();
+
+        if (!$member) {
+            return response()->json([
+                'message' => 'Membre introuvable.',
+            ], 404);
+        }
+
+        // Récupérer le nom anonyme avant de supprimer
+        $anonymousName = $member->anonymous_name;
+        $member->delete();
+        $group->decrement('members_count');
+
+        // Message système avec nom anonyme
+        GroupMessage::createSystemMessage($group, "{$anonymousName} a quitté le groupe");
+
+        return response()->json([
+            'message' => 'Vous avez quitté le groupe avec succès.',
         ]);
     }
 
@@ -911,5 +985,65 @@ class GroupController extends Controller
         return response()->json([
             'total_unread_count' => $totalUnreadCount,
         ]);
+    }
+
+    /**
+     * Signaler un groupe (membres uniquement, pas le créateur)
+     */
+    public function report(Request $request, Group $group): JsonResponse
+    {
+        $user = $request->user();
+
+        // Vérifier que l'utilisateur est membre du groupe
+        if (!$group->hasMember($user)) {
+            return response()->json([
+                'message' => 'Vous devez être membre du groupe pour le signaler.',
+            ], 403);
+        }
+
+        // Le créateur ne peut pas signaler son propre groupe
+        if ($group->isCreator($user)) {
+            return response()->json([
+                'message' => 'Vous ne pouvez pas signaler votre propre groupe.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', Rule::in([
+                GroupReport::REASON_SPAM,
+                GroupReport::REASON_HARASSMENT,
+                GroupReport::REASON_INAPPROPRIATE_CONTENT,
+                GroupReport::REASON_HATE_SPEECH,
+                GroupReport::REASON_VIOLENCE,
+                GroupReport::REASON_OTHER,
+            ])],
+            'description' => 'nullable|string|max:1000',
+        ]);
+
+        // Vérifier si l'utilisateur a déjà signalé ce groupe récemment (dans les 24h)
+        $existingReport = GroupReport::where('group_id', $group->id)
+            ->where('reporter_id', $user->id)
+            ->where('created_at', '>=', now()->subDay())
+            ->first();
+
+        if ($existingReport) {
+            return response()->json([
+                'message' => 'Vous avez déjà signalé ce groupe récemment. Veuillez attendre avant de soumettre un nouveau signalement.',
+            ], 422);
+        }
+
+        // Créer le signalement
+        $report = GroupReport::create([
+            'group_id' => $group->id,
+            'reporter_id' => $user->id,
+            'reason' => $validated['reason'],
+            'description' => $validated['description'] ?? null,
+            'status' => GroupReport::STATUS_PENDING,
+        ]);
+
+        return response()->json([
+            'message' => 'Signalement envoyé avec succès. Notre équipe va examiner votre demande.',
+            'report' => $report,
+        ], 201);
     }
 }

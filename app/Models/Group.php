@@ -202,7 +202,7 @@ class Group extends Model
      */
     public function addMember(User $user, string $role = GroupMember::ROLE_MEMBER): ?GroupMember
     {
-        // Vérifier si l'utilisateur est déjà membre
+        // Vérifier si l'utilisateur est déjà membre actif
         if ($this->hasMember($user)) {
             return null;
         }
@@ -212,12 +212,26 @@ class Group extends Model
             return null;
         }
 
-        // Créer le membre
-        $member = $this->members()->create([
-            'user_id' => $user->id,
-            'role' => $role,
-            'joined_at' => now(),
-        ]);
+        // Vérifier s'il existe un membre soft-deleted (utilisateur qui a quitté le groupe)
+        $existingMember = $this->members()->withTrashed()->where('user_id', $user->id)->first();
+
+        if ($existingMember && $existingMember->trashed()) {
+            // Restaurer le membre existant au lieu d'en créer un nouveau
+            $existingMember->restore();
+            $existingMember->update([
+                'role' => $role,
+                'joined_at' => now(),
+                'last_read_at' => null, // Reset le last_read_at pour éviter des problèmes de comptage de messages non lus
+            ]);
+            $member = $existingMember;
+        } else {
+            // Créer un nouveau membre
+            $member = $this->members()->create([
+                'user_id' => $user->id,
+                'role' => $role,
+                'joined_at' => now(),
+            ]);
+        }
 
         // Incrémenter le compteur
         $this->increment('members_count');

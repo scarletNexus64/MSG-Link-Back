@@ -223,6 +223,18 @@
                         <i class="fas fa-link w-5 mr-3"></i>
                         Générateur de liens
                     </a>
+
+                    <a href="{{ route('admin.group-reports.index') }}"
+                       class="flex items-center px-4 py-3 text-sm rounded-lg transition-colors {{ request()->routeIs('admin.group-reports.*') ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white' }}">
+                        <i class="fas fa-flag w-5 mr-3"></i>
+                        Plaintes et Signalements
+                        @php
+                            $pendingReportsCount = \App\Models\GroupReport::where('status', 'pending')->count();
+                        @endphp
+                        @if($pendingReportsCount > 0)
+                            <span class="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{{ $pendingReportsCount }}</span>
+                        @endif
+                    </a>
                 </div>
 
                 <!-- Section Settings -->

@@ -1,7 +1,7 @@
 <?php
 /**
  * Script de vérification des limites PHP
- * Accédez à http://10.138.95.28:8000/check-limits.php pour voir les limites actuelles
+ * Accédez à http://10.255.74.28:8000/check-limits.php pour voir les limites actuelles
  */
 
 header('Content-Type: application/json');
