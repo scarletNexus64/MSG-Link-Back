@@ -18,6 +18,12 @@
     </div>
 @endif
 
+@if(session('error'))
+    <div class="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+        <span class="block sm:inline">{{ session('error') }}</span>
+    </div>
+@endif
+
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
     <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
@@ -25,6 +31,7 @@
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Icône</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prix</th>
@@ -43,6 +50,26 @@
                                  style="background-color: {{ $gift->background_color }}">
                                 {{ $gift->icon }}
                             </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            @if($gift->emoji_image_path && $gift->emoji_image_url)
+                                <div class="flex items-center gap-2">
+                                    <img src="{{ $gift->emoji_image_url }}"
+                                         alt="{{ $gift->icon }}"
+                                         class="w-8 h-8 object-contain"
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+                                    <span class="text-2xl" style="display:none;">{{ $gift->icon }}</span>
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                        <i class="fas fa-check"></i> Généré
+                                    </span>
+                                </div>
+                            @else
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                        <i class="fas fa-times"></i> Non généré
+                                    </span>
+                                </div>
+                            @endif
                         </td>
                         <td class="px-6 py-4">
                             <div>
@@ -76,25 +103,43 @@
                             @endif
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <a href="{{ route('admin.gift-management.edit', $gift) }}"
-                               class="text-primary-600 hover:text-primary-900 mr-3">
-                                <i class="fas fa-edit"></i> Modifier
-                            </a>
-                            <form action="{{ route('admin.gift-management.destroy', $gift) }}"
-                                  method="POST"
-                                  class="inline-block"
-                                  onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce cadeau ?');">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="text-red-600 hover:text-red-900">
-                                    <i class="fas fa-trash"></i> Supprimer
-                                </button>
-                            </form>
+                            <div class="flex items-center gap-2">
+                                <a href="{{ route('admin.gift-management.edit', $gift) }}"
+                                   class="text-primary-600 hover:text-primary-900"
+                                   title="Modifier">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+
+                                <form action="{{ route('admin.gift-management.regenerate-image', $gift) }}"
+                                      method="POST"
+                                      class="inline-block"
+                                      onsubmit="return confirm('Voulez-vous régénérer l\'image Twemoji pour ce cadeau ?');">
+                                    @csrf
+                                    <button type="submit"
+                                            class="text-blue-600 hover:text-blue-900"
+                                            title="Régénérer l'image">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                </form>
+
+                                <form action="{{ route('admin.gift-management.destroy', $gift) }}"
+                                      method="POST"
+                                      class="inline-block"
+                                      onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce cadeau ?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit"
+                                            class="text-red-600 hover:text-red-900"
+                                            title="Supprimer">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                        <td colspan="8" class="px-6 py-12 text-center text-gray-500">
                             <i class="fas fa-gift text-4xl mb-4"></i>
                             <p>Aucun cadeau trouvé</p>
                         </td>

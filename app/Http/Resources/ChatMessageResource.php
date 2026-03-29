@@ -52,7 +52,8 @@ class ChatMessageResource extends JsonResource
                 return [
                     'id' => $gift?->id,
                     'name' => $gift?->name,
-                    'icon' => $gift?->icon,
+                    'icon' => $gift?->icon ?? '🎁',
+                    'emoji_image_url' => $gift?->emoji_image_url, // URL de l'image Twemoji
                     'animation' => $gift?->animation,
                     'price' => $gift?->price,
                     'formatted_price' => $gift?->formatted_price,

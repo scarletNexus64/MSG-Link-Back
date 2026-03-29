@@ -16,6 +16,7 @@ class Gift extends Model
         'slug',
         'description',
         'icon',
+        'emoji_image_path',
         'animation',
         'price',
         'tier',
@@ -89,6 +90,18 @@ class Gift extends Model
             self::TIER_DIAMOND => '#B9F2FF',
             default => '#666666',
         };
+    }
+
+    /**
+     * URL de l'image emoji (Twemoji)
+     */
+    public function getEmojiImageUrlAttribute(): ?string
+    {
+        if (!$this->emoji_image_path) {
+            return null;
+        }
+
+        return asset('storage/' . $this->emoji_image_path);
     }
 
     // ==================== SCOPES ====================

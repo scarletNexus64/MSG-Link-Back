@@ -7,6 +7,16 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class ConfessionResource extends JsonResource
 {
+    /**
+     * Déterminer si l'auteur doit être révélé
+     * Révélé SEULEMENT si l'identité a été explicitement révélée
+     */
+    private function shouldRevealAuthor(Request $request): bool
+    {
+        // Révéler l'auteur SEULEMENT si is_identity_revealed = true
+        return $this->is_identity_revealed;
+    }
+
     public function toArray(Request $request): array
     {
         return [
@@ -32,10 +42,13 @@ class ConfessionResource extends JsonResource
 
             // Auteur (masqué sauf si révélé)
             'author_initial' => $this->author_initial,
-            'author' => $this->when($this->is_identity_revealed, function () {
+            'author' => $this->when($this->shouldRevealAuthor($request), function () {
                 return $this->author_info;
             }),
             'is_identity_revealed' => $this->is_identity_revealed,
+
+            // Badge premium/certifié (visible même si anonyme)
+            'is_author_premium' => $this->author && $this->author->is_premium && $this->author->premium_expires_at && $this->author->premium_expires_at->isFuture(),
             
             // Destinataire (pour confessions privées)
             'recipient' => $this->when(

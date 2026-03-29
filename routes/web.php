@@ -207,9 +207,12 @@ Route::prefix('admin')->middleware('auth')->group(function () {
     // Group Reports Management
     Route::prefix('group-reports')->name('admin.group-reports.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Admin\GroupReportController::class, 'index'])->name('index');
-        Route::get('/{report}', [\App\Http\Controllers\Admin\GroupReportController::class, 'show'])->name('show');
+        Route::get('/group/{report}', [\App\Http\Controllers\Admin\GroupReportController::class, 'show'])->name('show');
+        Route::get('/confession/{report}', [\App\Http\Controllers\Admin\GroupReportController::class, 'showConfessionReport'])->name('show-confession');
         Route::put('/{report}/status', [\App\Http\Controllers\Admin\GroupReportController::class, 'updateStatus'])->name('update-status');
+        Route::put('/confession/{report}/status', [\App\Http\Controllers\Admin\GroupReportController::class, 'updateConfessionReportStatus'])->name('update-confession-status');
         Route::post('/{report}/close-group', [\App\Http\Controllers\Admin\GroupReportController::class, 'closeGroup'])->name('close-group');
+        Route::post('/confession/{report}/delete-confession', [\App\Http\Controllers\Admin\GroupReportController::class, 'deleteConfession'])->name('delete-confession');
     });
 
     // Gifts
@@ -239,6 +242,10 @@ Route::prefix('admin')->middleware('auth')->group(function () {
             'update' => 'admin.gift-management.update',
             'destroy' => 'admin.gift-management.destroy',
         ]);
+
+    // Régénérer l'image Twemoji d'un cadeau
+    Route::post('gift-management/{gift}/regenerate-image', [\App\Http\Controllers\Admin\GiftManagementController::class, 'regenerateImage'])
+        ->name('admin.gift-management.regenerate-image');
 
     // Sponsorship Packages (configuration)
     Route::resource('sponsorship-packages', \App\Http\Controllers\Admin\SponsorshipPackageController::class)

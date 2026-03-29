@@ -38,7 +38,7 @@
                     @enderror
                 </div>
 
-                <div>
+                <div class="md:col-span-2">
                     <label for="icon" class="block text-sm font-medium text-gray-700 mb-2">
                         Icône (Emoji) <span class="text-red-500">*</span>
                     </label>

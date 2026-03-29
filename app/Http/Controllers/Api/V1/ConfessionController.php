@@ -27,7 +27,7 @@ class ConfessionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $confessions = Confession::publicApproved()
-            ->with('author:id,first_name,last_name,username,avatar')
+            ->with('author:id,first_name,last_name,username,avatar,is_premium,premium_expires_at')
             ->withCount(['comments'])
             ->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 20));
@@ -66,7 +66,7 @@ class ConfessionController extends Controller
 
         $confessions = Confession::forRecipient($user->id)
             ->private()
-            ->with('author:id,first_name,last_name,username,avatar')
+            ->with('author:id,first_name,last_name,username,avatar,is_premium,premium_expires_at')
             ->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 20));
 
@@ -132,7 +132,7 @@ class ConfessionController extends Controller
             $confession->incrementViews();
         }
 
-        $confession->load('author:id,first_name,last_name,username,avatar');
+        $confession->load('author:id,first_name,last_name,username,avatar,is_premium,premium_expires_at');
         
         if ($user) {
             $confession->is_liked = $confession->isLikedBy($user);
@@ -788,7 +788,7 @@ class ConfessionController extends Controller
             })
             ->withTrashed() // Inclure les confessions supprimées
             ->publicApproved()
-            ->with('author:id,first_name,last_name,username,avatar')
+            ->with('author:id,first_name,last_name,username,avatar,is_premium,premium_expires_at')
             ->withCount(['comments'])
             ->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 20));

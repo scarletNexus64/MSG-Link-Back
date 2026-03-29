@@ -14,7 +14,8 @@ class GiftResource extends JsonResource
             'name' => $this->name,
             'slug' => $this->slug,
             'description' => $this->description ?? '',
-            'icon' => $this->icon,
+            'icon' => $this->icon ?? '🎁',
+            'emoji_image_url' => $this->emoji_image_url, // URL de l'image Twemoji
             'animation' => $this->animation ?? '', // Retourne string vide au lieu de null pour compatibilité frontend
             'price' => $this->price,
             'formatted_price' => $this->formatted_price,
