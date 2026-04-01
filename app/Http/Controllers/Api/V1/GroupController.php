@@ -383,12 +383,8 @@ class GroupController extends Controller
         $perPage = $request->get('per_page', 10); // Par défaut 10 messages
         $before = $request->get('before'); // Timestamp ou message_id pour charger les anciens
 
-        // Construire la requête de base
-        $query = $group->messages();
-
-        if ($canSeeIdentity) {
-            $query->with('sender');
-        }
+        // Construire la requête de base - Toujours charger le sender pour avoir l'avatar
+        $query = $group->messages()->with('sender');
 
         // Si 'before' est fourni, charger les messages avant ce timestamp/id
         if ($before) {
@@ -415,29 +411,44 @@ class GroupController extends Controller
         $messages->transform(function ($message) use ($user, $canSeeIdentity) {
             $message->is_own = $message->sender_id === $user->id;
 
-            // Ajouter les données du sender selon le statut premium
-            if ($canSeeIdentity && $message->sender) {
-                $message->sender_first_name = $message->sender->first_name;
-                $message->sender_last_name = $message->sender->last_name;
-                $message->sender_username = $message->sender->username;
+            // L'avatar est toujours visible, mais le nom dépend du statut Premium
+            if ($message->sender) {
+                // Avatar toujours visible
                 $message->sender_avatar_url = $message->sender->avatar_url;
                 $message->sender_initial = $message->sender->initial;
 
-                // Remplacer la relation sender par un objet simple pour éviter les problèmes de sérialisation
-                $message->setRelation('sender', [
-                    'id' => $message->sender->id,
-                    'first_name' => $message->sender->first_name,
-                    'last_name' => $message->sender->last_name,
-                    'username' => $message->sender->username,
-                    'avatar_url' => $message->sender->avatar_url,
-                    'is_premium' => $message->sender->is_premium ?? false,
-                    'is_verified' => $message->sender->is_verified ?? false,
-                ]);
-            } else {
-                $message->sender_name = 'Anonyme';
-                $message->sender_initial = 'A';
-                // Retirer la relation sender pour les utilisateurs non premium
-                $message->unsetRelation('sender');
+                // Nom visible seulement si Premium
+                if ($canSeeIdentity) {
+                    $message->sender_first_name = $message->sender->first_name;
+                    $message->sender_last_name = $message->sender->last_name;
+                    $message->sender_username = $message->sender->username;
+                    $message->sender_is_premium = $message->sender->is_premium ?? false;
+                    $message->sender_is_verified = $message->sender->is_verified ?? false;
+
+                    // Remplacer la relation sender par un objet simple
+                    $message->setRelation('sender', [
+                        'id' => $message->sender->id,
+                        'first_name' => $message->sender->first_name,
+                        'last_name' => $message->sender->last_name,
+                        'username' => $message->sender->username,
+                        'avatar_url' => $message->sender->avatar_url,
+                        'is_premium' => $message->sender->is_premium ?? false,
+                        'is_verified' => $message->sender->is_verified ?? false,
+                    ]);
+                } else {
+                    // Pas Premium : Anonyme pour le nom mais avatar visible
+                    $message->sender_name = 'Anonyme';
+                    // Toujours envoyer l'avatar même si anonyme
+                    $message->setRelation('sender', [
+                        'id' => $message->sender->id,
+                        'first_name' => 'Anonyme',
+                        'last_name' => '',
+                        'username' => 'anonyme',
+                        'avatar_url' => $message->sender->avatar_url, // Avatar toujours visible
+                        'is_premium' => false,
+                        'is_verified' => false,
+                    ]);
+                }
             }
 
             return $message;
@@ -649,17 +660,21 @@ class GroupController extends Controller
 
         $message->is_own = true;
 
-        // Ajouter les données du sender pour le retour API
+        // Avatar toujours visible, mais nom dépend du statut Premium
+        $message->sender_avatar_url = $user->avatar_url; // Avatar toujours visible
+        $message->sender_initial = $user->initial;
+
         $canSeeIdentity = $user->has_active_premium ?? false;
         if ($canSeeIdentity) {
+            // Premium : Envoyer le vrai nom + avatar
             $message->sender_first_name = $user->first_name;
             $message->sender_last_name = $user->last_name;
             $message->sender_username = $user->username;
-            $message->sender_avatar_url = $user->avatar_url;
-            $message->sender_initial = $user->initial;
+            $message->sender_is_premium = $user->is_premium ?? false;
+            $message->sender_is_verified = $user->is_verified ?? false;
         } else {
+            // Pas Premium : Anonyme pour le nom, mais avatar visible
             $message->sender_name = 'Anonyme';
-            $message->sender_initial = 'A';
         }
 
         // Diffuser l'événement en temps réel
@@ -767,13 +782,13 @@ class GroupController extends Controller
             ], 403);
         }
 
-        // Charger la relation user pour révéler l'identité si premium
+        // Avatar toujours visible, mais nom dépend du statut Premium
+        $canSeeIdentity = $user->has_active_premium ?? false;
+
         $members = $group->activeMembers()
             ->with('user')
             ->get()
-            ->map(function ($member) use ($user) {
-                $canSeeIdentity = $user->has_active_premium ?? false;
-
+            ->map(function ($member) use ($user, $canSeeIdentity) {
                 $memberData = [
                     'id' => $member->id,
                     'user_id' => $member->user_id,
@@ -784,17 +799,22 @@ class GroupController extends Controller
                     'is_identity_revealed' => $canSeeIdentity,
                 ];
 
-                // Si premium, révéler l'identité
-                if ($canSeeIdentity && $member->user) {
-                    $memberData['first_name'] = $member->user->first_name;
-                    $memberData['last_name'] = $member->user->last_name;
-                    $memberData['username'] = $member->user->username;
+                if ($member->user) {
+                    // Avatar toujours visible
                     $memberData['avatar_url'] = $member->user->avatar_url;
                     $memberData['initial'] = $member->user->initial;
-                } else {
-                    // Sinon, anonyme
-                    $memberData['display_name'] = 'Anonyme';
-                    $memberData['initial'] = 'A';
+
+                    // Nom visible seulement si Premium
+                    if ($canSeeIdentity) {
+                        $memberData['first_name'] = $member->user->first_name;
+                        $memberData['last_name'] = $member->user->last_name;
+                        $memberData['username'] = $member->user->username;
+                        $memberData['is_premium'] = $member->user->is_premium ?? false;
+                        $memberData['is_verified'] = $member->user->is_verified ?? false;
+                    } else {
+                        // Pas Premium : Anonyme pour le nom, mais avatar visible
+                        $memberData['display_name'] = 'Anonyme';
+                    }
                 }
 
                 return $memberData;

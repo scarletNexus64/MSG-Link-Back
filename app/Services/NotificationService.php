@@ -272,6 +272,104 @@ class NotificationService
     }
 
     /**
+     * Notification de retrait échoué
+     */
+    public function sendWithdrawalFailedNotification(Withdrawal $withdrawal): void
+    {
+        $user = $withdrawal->user;
+
+        $reason = $withdrawal->rejection_reason ?? 'Une erreur est survenue';
+
+        $this->createNotification(
+            $user,
+            'withdrawal_failed',
+            'Retrait échoué ❌',
+            "Votre retrait de {$withdrawal->formatted_amount} a échoué. Raison: {$reason}",
+            [
+                'withdrawal_id' => $withdrawal->id,
+                'reason' => $reason,
+                'action' => 'view_wallet',
+            ]
+        );
+
+        $this->sendPushNotification(
+            $user,
+            '❌ Retrait échoué',
+            "Votre retrait a échoué. Veuillez réessayer.",
+            [
+                'type' => 'withdrawal_failed',
+                'withdrawal_id' => (string) $withdrawal->id,
+            ]
+        );
+    }
+
+    /**
+     * Notification de dépôt complété
+     */
+    public function sendDepositCompletedNotification(\App\Models\Transaction $transaction): void
+    {
+        $user = $transaction->user;
+
+        $formattedAmount = number_format($transaction->amount, 0, ',', ' ') . ' FCFA';
+
+        $this->createNotification(
+            $user,
+            'deposit_completed',
+            'Dépôt réussi ✅',
+            "Votre dépôt de {$formattedAmount} a été effectué avec succès.",
+            [
+                'transaction_id' => $transaction->id,
+                'amount' => $transaction->amount,
+                'action' => 'view_wallet',
+            ]
+        );
+
+        $this->sendPushNotification(
+            $user,
+            '✅ Dépôt réussi',
+            "Votre compte a été crédité de {$formattedAmount}",
+            [
+                'type' => 'deposit_completed',
+                'transaction_id' => (string) $transaction->id,
+            ]
+        );
+    }
+
+    /**
+     * Notification de dépôt échoué
+     */
+    public function sendDepositFailedNotification(\App\Models\Transaction $transaction, string $reason = null): void
+    {
+        $user = $transaction->user;
+
+        $formattedAmount = number_format($transaction->amount, 0, ',', ' ') . ' FCFA';
+        $failureReason = $reason ?? 'Une erreur est survenue';
+
+        $this->createNotification(
+            $user,
+            'deposit_failed',
+            'Dépôt échoué ❌',
+            "Votre dépôt de {$formattedAmount} a échoué. Raison: {$failureReason}",
+            [
+                'transaction_id' => $transaction->id,
+                'amount' => $transaction->amount,
+                'reason' => $failureReason,
+                'action' => 'view_wallet',
+            ]
+        );
+
+        $this->sendPushNotification(
+            $user,
+            '❌ Dépôt échoué',
+            "Votre dépôt de {$formattedAmount} a échoué.",
+            [
+                'type' => 'deposit_failed',
+                'transaction_id' => (string) $transaction->id,
+            ]
+        );
+    }
+
+    /**
      * Notification d'abonnement expirant bientôt
      */
     public function sendSubscriptionExpiringNotification(User $user, int $daysRemaining): void

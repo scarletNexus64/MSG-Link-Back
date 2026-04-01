@@ -58,7 +58,7 @@ class ConversationResource extends JsonResource
                 'full_name' => $canViewIdentity ? $otherParticipant->full_name : null,
                 'username' => $canViewIdentity ? $otherParticipant->username : null,
                 'initial' => $otherParticipant->initial,
-                'avatar_url' => $canViewIdentity ? $otherParticipant->avatar_url : null,
+                'avatar_url' => $otherParticipant->avatar_url, // Avatar toujours visible
                 'is_online' => $otherParticipant->is_online,
                 'is_premium' => $otherParticipant->is_premium,
                 'last_seen_at' => $otherParticipant->last_seen_at?->toIso8601String(),

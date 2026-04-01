@@ -62,6 +62,9 @@ class ConfessionResource extends JsonResource
             'comments_count' => $this->comments_count ?? 0,
             'is_liked' => isset($this->is_liked) ? $this->is_liked : false,
 
+            // Est-ce ma confession ? (pour permettre la modification/suppression même si anonyme)
+            'is_mine' => $request->user() && $this->author_id === $request->user()->id,
+
             // Statut de suppression (pour les favoris)
             'is_deleted' => $this->when(isset($this->is_deleted), $this->is_deleted),
 

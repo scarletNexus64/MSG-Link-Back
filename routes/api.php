@@ -29,6 +29,7 @@ use App\Http\Controllers\Admin\WithdrawalController as AdminWithdrawalController
 use App\Http\Controllers\Admin\MaintenanceController;
 use App\Http\Controllers\Api\LegalPageController;
 use App\Http\Controllers\Api\V1\AccountDeletionController;
+use App\Http\Controllers\ContactController;
 
 /*
 |--------------------------------------------------------------------------
@@ -157,6 +158,12 @@ Route::prefix('v1')->group(function () {
             Route::delete('/{username}/block', [UserController::class, 'unblock']);
         });
 
+        // ==================== CONTACTS ====================
+        Route::prefix('contacts')->group(function () {
+            Route::post('/sync', [ContactController::class, 'sync']);
+            Route::get('/', [ContactController::class, 'index']);
+        });
+
         // ==================== MESSAGES ANONYMES ====================
         Route::prefix('messages')->group(function () {
             Route::get('/', [MessageController::class, 'index']);
@@ -210,6 +217,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/conversations/{conversation}/messages', [ChatController::class, 'messages']);
             Route::post('/conversations/{conversation}/messages', [ChatController::class, 'sendMessage']);
             Route::patch('/conversations/{conversation}/messages/{message}', [ChatController::class, 'updateMessage']);
+            Route::delete('/conversations/{conversation}/messages/{message}', [ChatController::class, 'deleteMessage']);
             Route::post('/conversations/{conversation}/typing', [ChatController::class, 'updateTypingStatus']);
             Route::post('/conversations/{conversation}/read', [ChatController::class, 'markAsRead']);
             Route::post('/conversations/{conversation}/reveal', [ChatController::class, 'revealIdentity']);

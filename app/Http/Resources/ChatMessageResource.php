@@ -22,7 +22,7 @@ class ChatMessageResource extends JsonResource
                 'id' => $this->sender->id,
                 'initial' => $this->sender->initial,
                 'first_name' => ($isMine || $hasPremium) ? $this->sender->first_name : null,
-                'avatar_url' => ($isMine || $hasPremium) ? $this->sender->avatar_url : null,
+                'avatar_url' => $this->sender->avatar_url, // Avatar toujours visible
             ];
         } else {
             // Sender supprimé - retourner des données anonymes

@@ -20,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ChatController extends Controller
@@ -163,17 +164,36 @@ class ChatController extends Controller
             $messagesQuery->where('created_at', '>', $hiddenAt);
         }
 
+        // Compter le total de messages
+        $totalMessages = $messagesQuery->count();
+        $perPage = $request->get('per_page', 50);
+        $currentPage = $request->get('page', 1);
+
+        // Calculer combien de messages à skip pour paginer depuis la fin
+        // Page 1 = les N derniers messages (récents)
+        // Page 2 = les N messages avant ça (plus anciens)
+        $lastPage = ceil($totalMessages / $perPage);
+        $reversedPage = $lastPage - $currentPage + 1;
+
+        // Si page inversée < 1, prendre page 1
+        if ($reversedPage < 1) {
+            $reversedPage = 1;
+        }
+
+        // Récupérer les messages par ordre ASC (anciens en premier)
+        // mais en paginant depuis la fin
         $messages = $messagesQuery
             ->orderBy('created_at', 'asc')
-            ->paginate($request->get('per_page', 50));
+            ->paginate($perPage, ['*'], 'page', $reversedPage);
 
         return response()->json([
             'messages' => ChatMessageResource::collection($messages),
             'meta' => [
-                'current_page' => $messages->currentPage(),
-                'last_page' => $messages->lastPage(),
-                'per_page' => $messages->perPage(),
-                'total' => $messages->total(),
+                'current_page' => (int) $currentPage,
+                'last_page' => (int) $lastPage,
+                'per_page' => (int) $perPage,
+                'total' => (int) $totalMessages,
+                'has_more_pages' => $currentPage < $lastPage,
             ],
         ]);
     }
@@ -959,6 +979,95 @@ class ChatController extends Controller
 
             return response()->json([
                 'message' => 'Une erreur est survenue lors de l\'édition du message.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Supprimer un message dans une conversation
+     */
+    public function deleteMessage(Request $request, Conversation $conversation, ChatMessage $message): JsonResponse
+    {
+        $user = $request->user();
+
+        // Vérifier que l'utilisateur est participant de la conversation
+        if (!$conversation->hasParticipant($user)) {
+            return response()->json([
+                'message' => 'Accès non autorisé.',
+            ], 403);
+        }
+
+        // Vérifier que le message appartient à cette conversation
+        if ($message->conversation_id !== $conversation->id) {
+            return response()->json([
+                'message' => 'Ce message n\'appartient pas à cette conversation.',
+            ], 404);
+        }
+
+        // Vérifier que l'utilisateur est bien l'expéditeur du message
+        if ($message->sender_id !== $user->id) {
+            return response()->json([
+                'message' => 'Vous ne pouvez supprimer que vos propres messages.',
+            ], 403);
+        }
+
+        // Les messages système ne peuvent pas être supprimés
+        if ($message->type === ChatMessage::TYPE_SYSTEM) {
+            return response()->json([
+                'message' => 'Les messages système ne peuvent pas être supprimés.',
+            ], 422);
+        }
+
+        try {
+            // Supprimer le fichier média si présent (image, audio, vidéo)
+            if ($message->media_url && in_array($message->type, [ChatMessage::TYPE_IMAGE, ChatMessage::TYPE_AUDIO, ChatMessage::TYPE_VIDEO])) {
+                try {
+                    Storage::disk('public')->delete($message->media_url);
+                    \Log::info('🗑️ [CHAT] Media file deleted', [
+                        'message_id' => $message->id,
+                        'media_url' => $message->media_url,
+                        'type' => $message->type,
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::warning('⚠️ [CHAT] Failed to delete media file: ' . $e->getMessage());
+                }
+            }
+
+            // Sauvegarder l'ID avant soft delete
+            $messageId = $message->id;
+
+            // Soft delete du message
+            $message->delete();
+
+            \Log::info('✅ [CHAT] Message deleted successfully', [
+                'message_id' => $messageId,
+                'conversation_id' => $conversation->id,
+                'sender_id' => $user->id,
+            ]);
+
+            // Diffuser l'événement en temps réel
+            try {
+                \Log::info('📤 [CHAT] Broadcasting ChatMessageDeleted', [
+                    'message_id' => $messageId,
+                    'conversation_id' => $conversation->id,
+                ]);
+
+                broadcast(new \App\Events\ChatMessageDeleted($conversation->id, $messageId))->toOthers();
+
+                \Log::info('✅ [CHAT] ChatMessageDeleted broadcasted successfully');
+            } catch (\Exception $e) {
+                \Log::warning('⚠️ [CHAT] Broadcasting failed for message deletion: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'Message supprimé avec succès.',
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('❌ [CHAT] Erreur lors de la suppression du message: ' . $e->getMessage());
+
+            return response()->json([
+                'message' => 'Une erreur est survenue lors de la suppression du message.',
             ], 500);
         }
     }

@@ -5,6 +5,7 @@ namespace App\Jobs\Wallet;
 use App\Models\Withdrawal;
 use App\Models\WalletTransaction;
 use App\Services\Payment\FreemopayService;
+use App\Services\NotificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -28,7 +29,7 @@ class ProcessWithdrawalStatusJob implements ShouldQueue
         public int $withdrawalId
     ) {}
 
-    public function handle(FreemopayService $freemopayService)
+    public function handle(FreemopayService $freemopayService, NotificationService $notificationService)
     {
         $withdrawal = Withdrawal::find($this->withdrawalId);
 
@@ -81,7 +82,7 @@ class ProcessWithdrawalStatusJob implements ShouldQueue
             ]);
 
             // Traiter selon le statut (lock to avoid double-processing/debit)
-            DB::transaction(function () use ($withdrawal, $status, $reason, $statusResponse) {
+            DB::transaction(function () use ($withdrawal, $status, $reason, $statusResponse, $notificationService) {
                 $withdrawal = Withdrawal::whereKey($withdrawal->id)->lockForUpdate()->first();
 
                 if (!$withdrawal) {
@@ -109,6 +110,19 @@ class ProcessWithdrawalStatusJob implements ShouldQueue
                         'user_id' => $withdrawal->user_id,
                     ]);
 
+                    // Envoyer notification FCM à l'utilisateur
+                    try {
+                        $notificationService->sendWithdrawalProcessedNotification($withdrawal);
+                        Log::info('📱 [PROCESS-WITHDRAWAL] FCM notification sent', [
+                            'withdrawal_id' => $withdrawal->id,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('❌ [PROCESS-WITHDRAWAL] Failed to send FCM notification', [
+                            'withdrawal_id' => $withdrawal->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+
                 } elseif (in_array($status, ['FAILED', 'FAILURE', 'ERROR', 'REJECTED', 'CANCELLED', 'CANCELED'])) {
                     Log::warning('⚠️ [PROCESS-WITHDRAWAL] Withdrawal FAILED', [
                         'withdrawal_id' => $withdrawal->id,
@@ -120,6 +134,19 @@ class ProcessWithdrawalStatusJob implements ShouldQueue
                         'rejection_reason' => $reason ?? 'Withdrawal failed',
                         'processed_at' => now(),
                     ]);
+
+                    // Envoyer notification FCM d'échec
+                    try {
+                        $notificationService->sendWithdrawalFailedNotification($withdrawal);
+                        Log::info('📱 [PROCESS-WITHDRAWAL] FCM failure notification sent', [
+                            'withdrawal_id' => $withdrawal->id,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('❌ [PROCESS-WITHDRAWAL] Failed to send FCM failure notification', [
+                            'withdrawal_id' => $withdrawal->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
 
                 } elseif (in_array($status, ['PENDING', 'PROCESSING', 'INITIATED', 'CREATED'])) {
                     Log::debug('⏳ [PROCESS-WITHDRAWAL] Withdrawal still pending', [

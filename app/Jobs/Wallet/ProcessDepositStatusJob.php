@@ -5,6 +5,7 @@ namespace App\Jobs\Wallet;
 use App\Models\Transaction;
 use App\Models\WalletTransaction;
 use App\Services\Payment\FreemopayService;
+use App\Services\NotificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -28,7 +29,7 @@ class ProcessDepositStatusJob implements ShouldQueue
         public int $transactionId
     ) {}
 
-    public function handle(FreemopayService $freemopayService)
+    public function handle(FreemopayService $freemopayService, NotificationService $notificationService)
     {
         $transaction = Transaction::find($this->transactionId);
 
@@ -78,7 +79,7 @@ class ProcessDepositStatusJob implements ShouldQueue
             ]);
 
             // Traiter selon le statut
-            DB::transaction(function () use ($transaction, $status, $reason, $statusResponse, $meta) {
+            DB::transaction(function () use ($transaction, $status, $reason, $statusResponse, $meta, $notificationService) {
                 // Mettre à jour les meta avec la réponse
                 $meta['last_status_check'] = now()->toISOString();
                 $meta['freemopay_status'] = $status;
@@ -108,6 +109,19 @@ class ProcessDepositStatusJob implements ShouldQueue
                         'user_id' => $transaction->user_id,
                     ]);
 
+                    // Envoyer notification FCM à l'utilisateur
+                    try {
+                        $notificationService->sendDepositCompletedNotification($transaction);
+                        Log::info('📱 [PROCESS-DEPOSIT] FCM notification sent', [
+                            'transaction_id' => $transaction->id,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('❌ [PROCESS-DEPOSIT] Failed to send FCM notification', [
+                            'transaction_id' => $transaction->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+
                 } elseif (in_array($status, ['FAILED', 'FAILURE', 'ERROR', 'REJECTED', 'CANCELLED', 'CANCELED'])) {
                     Log::warning('⚠️ [PROCESS-DEPOSIT] Payment FAILED', [
                         'transaction_id' => $transaction->id,
@@ -121,6 +135,19 @@ class ProcessDepositStatusJob implements ShouldQueue
                             'failed_at' => now()->toISOString(),
                         ])),
                     ]);
+
+                    // Envoyer notification FCM d'échec
+                    try {
+                        $notificationService->sendDepositFailedNotification($transaction, $reason);
+                        Log::info('📱 [PROCESS-DEPOSIT] FCM failure notification sent', [
+                            'transaction_id' => $transaction->id,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('❌ [PROCESS-DEPOSIT] Failed to send FCM failure notification', [
+                            'transaction_id' => $transaction->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
 
                 } elseif (in_array($status, ['PENDING', 'PROCESSING', 'INITIATED'])) {
                     Log::debug('⏳ [PROCESS-DEPOSIT] Payment still pending', [
