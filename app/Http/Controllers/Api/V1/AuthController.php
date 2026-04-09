@@ -177,8 +177,15 @@ class AuthController extends Controller
         \Log::info('🚪 [AUTH_CONTROLLER] Tentative de déconnexion');
         \Log::info('👤 [AUTH_CONTROLLER] Utilisateur: ' . $request->user()->username . ' (ID: ' . $request->user()->id . ')');
 
+        $user = $request->user();
+
+        // Supprimer le FCM token pour arrêter les notifications push
+        $user->update(['fcm_token' => null]);
+
+        \Log::info('📱 [AUTH_CONTROLLER] FCM token supprimé');
+
         // Révoquer le token actuel
-        $request->user()->currentAccessToken()->delete();
+        $user->currentAccessToken()->delete();
 
         \Log::info('✅ [AUTH_CONTROLLER] Token révoqué avec succès');
 
@@ -192,8 +199,13 @@ class AuthController extends Controller
      */
     public function logoutAll(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        // Supprimer le FCM token pour arrêter les notifications push
+        $user->update(['fcm_token' => null]);
+
         // Révoquer tous les tokens
-        $request->user()->tokens()->delete();
+        $user->tokens()->delete();
 
         return response()->json([
             'message' => 'Déconnexion de tous les appareils réussie',

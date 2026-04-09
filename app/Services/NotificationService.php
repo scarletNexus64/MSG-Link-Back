@@ -90,6 +90,11 @@ class NotificationService
     {
         $recipient = $message->recipient;
 
+        // Ne pas envoyer de notification si l'utilisateur s'envoie un message à lui-même
+        if ($message->sender_id === $message->recipient_id) {
+            return;
+        }
+
         // Notification en base
         $this->createNotification(
             $recipient,
@@ -125,6 +130,11 @@ class NotificationService
 
         $recipient = $confession->recipient;
 
+        // Ne pas envoyer de notification si l'utilisateur s'envoie une confession à lui-même
+        if ($confession->author_id === $confession->recipient_id) {
+            return;
+        }
+
         $this->createNotification(
             $recipient,
             'new_confession',
@@ -154,6 +164,11 @@ class NotificationService
     {
         $conversation = $message->conversation;
         $recipient = $conversation->getOtherParticipant($message->sender);
+
+        // Ne pas envoyer de notification si l'utilisateur s'envoie un message à lui-même (sécurité)
+        if ($message->sender_id === $recipient->id) {
+            return;
+        }
 
         // Toujours rester mystérieux pour garder l'anonymat
         $this->createNotification(
@@ -186,6 +201,11 @@ class NotificationService
     {
         $recipient = $transaction->recipient;
         $gift = $transaction->gift;
+
+        // Ne pas envoyer de notification si l'utilisateur s'envoie un cadeau à lui-même
+        if ($transaction->sender_id === $transaction->recipient_id) {
+            return;
+        }
 
         $this->createNotification(
             $recipient,
@@ -523,6 +543,11 @@ class NotificationService
         $recipient = $story->user;
 
         if (!$recipient) {
+            return;
+        }
+
+        // Ne pas envoyer de notification si l'utilisateur répond à sa propre story
+        if ($message->sender_id === $story->user_id) {
             return;
         }
 

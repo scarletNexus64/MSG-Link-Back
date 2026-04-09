@@ -475,12 +475,14 @@ class StoryController extends Controller
             ], 422);
         }
 
-        // Envoyer une notification FCM au créateur de la story
-        try {
-            $notificationService = app(NotificationService::class);
-            $notificationService->sendStoryLikeNotification($story);
-        } catch (\Exception $e) {
-            \Log::warning('Story like notification failed: ' . $e->getMessage());
+        // Envoyer une notification FCM au créateur de la story (sauf si c'est lui-même)
+        if ($story->user_id !== $user->id) {
+            try {
+                $notificationService = app(NotificationService::class);
+                $notificationService->sendStoryLikeNotification($story);
+            } catch (\Exception $e) {
+                \Log::warning('Story like notification failed: ' . $e->getMessage());
+            }
         }
 
         return response()->json([

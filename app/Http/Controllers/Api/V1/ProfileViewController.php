@@ -119,8 +119,10 @@ class ProfileViewController extends Controller
                 // Récupérer l'utilisateur dont le profil a été vu
                 $viewedUser = User::findOrFail($viewedUserId);
 
-                // Envoyer la notification
-                $this->notificationService->sendProfileViewNotification($viewedUser);
+                // Envoyer la notification (sauf si l'utilisateur visite son propre profil)
+                if ($viewer->id !== $viewedUserId) {
+                    $this->notificationService->sendProfileViewNotification($viewedUser);
+                }
 
                 Log::info('👁️ Profile view recorded', [
                     'viewer_id' => $viewer->id,
