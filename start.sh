@@ -55,11 +55,11 @@ echo -e "  • memory_limit        : ${YELLOW}256M${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-echo -e "${GREEN}🌐 Démarrage du serveur sur http://10.202.205.28:8000${NC}"
-echo -e "${YELLOW}📊 Vérifier les limites: http://10.202.205.28:8000/check-limits.php${NC}"
+echo -e "${GREEN}🌐 Démarrage du serveur sur http://10.144.156.28:8000${NC}"
+echo -e "${YELLOW}📊 Vérifier les limites: http://10.144.156.28:8000/check-limits.php${NC}"
 echo ""
 echo -e "${YELLOW}Appuyez sur Ctrl+C pour arrêter le serveur${NC}"
 echo ""
 
 # Démarrer le serveur avec les bonnes configurations PHP
-php -c php.ini artisan serve --host=10.202.205.28 --port=8000
+php -c php.ini artisan serve --host=10.144.156.28 --port=8000
