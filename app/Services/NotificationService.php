@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Factory;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification as FCMNotification;
+use Kreait\Firebase\Messaging\AndroidConfig;
+use Kreait\Firebase\Messaging\ApnsConfig;
 
 class NotificationService
 {
@@ -54,16 +56,46 @@ class NotificationService
     /**
      * Envoyer une notification push via FCM
      */
-    public function sendPushNotification(User $user, string $title, string $body, array $data = []): bool
+    public function sendPushNotification(User $user, string $title, string $body, array $data = [], ?string $imageUrl = null): bool
     {
         if (!$this->messaging || !$user->fcm_token) {
             return false;
         }
 
         try {
+            // Créer la notification de base avec image si fournie
+            $notification = $imageUrl
+                ? FCMNotification::create($title, $body)->withImageUrl($imageUrl)
+                : FCMNotification::create($title, $body);
+
             $message = CloudMessage::withTarget('token', $user->fcm_token)
-                ->withNotification(FCMNotification::create($title, $body))
+                ->withNotification($notification)
                 ->withData($data);
+
+            // Configuration Android : icône et couleur
+            $androidConfig = AndroidConfig::fromArray([
+                'priority' => 'high',
+                'notification' => [
+                    'icon' => 'ic_notification_white',  // Icône blanche XML (SANS préfixe @drawable/ pour FCM)
+                    'color' => '#FF1493',          // Couleur rose/violet (gradient de votre logo)
+                    'sound' => 'default',
+                    'channel_id' => 'weylo_notifications',  // Doit correspondre au channel créé dans l'app
+                ],
+            ]);
+
+            // Configuration iOS/APNs
+            $apnsConfig = ApnsConfig::fromArray([
+                'payload' => [
+                    'aps' => [
+                        'sound' => 'default',
+                        'badge' => 1,
+                    ],
+                ],
+            ]);
+
+            $message = $message
+                ->withAndroidConfig($androidConfig)
+                ->withApnsConfig($apnsConfig);
 
             $this->messaging->send($message);
 
@@ -445,16 +477,46 @@ class NotificationService
     /**
      * Envoyer une notification push par topic
      */
-    public function sendTopicNotification(string $topic, string $title, string $body, array $data = []): bool
+    public function sendTopicNotification(string $topic, string $title, string $body, array $data = [], ?string $imageUrl = null): bool
     {
         if (!$this->messaging) {
             return false;
         }
 
         try {
+            // Créer la notification de base avec image si fournie
+            $notification = $imageUrl
+                ? FCMNotification::create($title, $body)->withImageUrl($imageUrl)
+                : FCMNotification::create($title, $body);
+
             $message = CloudMessage::withTarget('topic', $topic)
-                ->withNotification(FCMNotification::create($title, $body))
+                ->withNotification($notification)
                 ->withData($data);
+
+            // Configuration Android : icône et couleur
+            $androidConfig = AndroidConfig::fromArray([
+                'priority' => 'high',
+                'notification' => [
+                    'icon' => 'ic_notification_white',  // Icône blanche XML (SANS préfixe @drawable/ pour FCM)
+                    'color' => '#FF1493',          // Couleur rose/violet (gradient de votre logo)
+                    'sound' => 'default',
+                    'channel_id' => 'weylo_notifications',  // Doit correspondre au channel créé dans l'app
+                ],
+            ]);
+
+            // Configuration iOS/APNs
+            $apnsConfig = ApnsConfig::fromArray([
+                'payload' => [
+                    'aps' => [
+                        'sound' => 'default',
+                        'badge' => 1,
+                    ],
+                ],
+            ]);
+
+            $message = $message
+                ->withAndroidConfig($androidConfig)
+                ->withApnsConfig($apnsConfig);
 
             $this->messaging->send($message);
 
